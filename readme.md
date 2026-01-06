@@ -21,12 +21,13 @@ promptiin pitäisi ilmestyä (venv)
 
 Asenna riippuvuudet venviin
 
-python3 -m pip install --upgrade pip
-python3 -m pip install python-docx openai
+python -m pip install --upgrade pip
+python -m pip install python-docx openai
+python -m pip install --upgrade openai
 sudo apt install -y dos2unix
 
 varmista:
-python3 -c "import docx; import openai; print('ok')"
+python -c "import docx; import openai; print('ok')"
 
 Aseta OpenAI API -avain ympäristömuuttujaan
 Lisää rivi ~/.bashrc-tiedoston loppuun:
