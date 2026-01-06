@@ -1,0 +1,16 @@
+# Python virtualenv
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# build/packaging
+dist/
+build/
+*.egg-info/
+
+# misc
+.DS_Store
