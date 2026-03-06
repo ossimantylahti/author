@@ -7,7 +7,8 @@ from docx import Document
 from openai import OpenAI
 
 # You can swap model here.
-MODEL = "gpt-5.2"
+# GPT 5.4 published on 6.3.2026.
+MODEL = "gpt-5.4"
 
 # Max output per single API call
 MAX_OUTPUT_TOKENS = 3000
