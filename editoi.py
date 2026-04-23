@@ -5,11 +5,18 @@ from typing import Optional, Tuple, List
 
 from docx import Document
 from openai import OpenAI
+from openai import NotFoundError
 
 # You can swap model here.
 # GPT 5.4 published on 6.3.2026.
 # GPT 5.5 published on 23.4.2026
 MODEL = "gpt-5.5"
+# Ordered fallback models (MODEL is the primary preferred option).
+MODEL_FALLBACKS = [
+    "gpt-5.4",
+    "gpt-5.2",
+    "gpt-4",
+]
 
 # Max output per single API call
 MAX_OUTPUT_TOKENS = 3000
@@ -37,6 +44,13 @@ def clean_text(s: str) -> str:
     return s.encode("utf-8", errors="ignore").decode("utf-8")
 
 client = OpenAI()  # uses OPENAI_API_KEY from the environment
+ACTIVE_MODEL: Optional[str] = None
+
+
+def _require_active_model() -> str:
+    if not ACTIVE_MODEL:
+        raise RuntimeError("ACTIVE_MODEL is not set. Call select_active_model() first.")
+    return ACTIVE_MODEL
 
 
 def load_docx_as_text(path: str) -> str:
@@ -142,7 +156,7 @@ def _call_initial(book_text: str, question: str):
 
     print("[DEBUG] Sending INITIAL request (all input files + question)...", flush=True)
     response = client.responses.create(
-        model=MODEL,
+        model=_require_active_model(),
         instructions=instructions,
         input=[
             {
@@ -174,7 +188,7 @@ def _call_followup(previous_response_id: str, content: str, index: int):
     """Follow-up call: keep the same session, send only a new message."""
     print(f"[DEBUG] Sending FOLLOWUP #{index}...", flush=True)
     response = client.responses.create(
-        model=MODEL,
+        model=_require_active_model(),
         previous_response_id=previous_response_id,
         input=[
             {
@@ -249,7 +263,58 @@ def _usage_exit() -> None:
     sys.exit(1)
 
 
+def _candidate_models() -> List[str]:
+    """Return primary model + unique fallbacks in order."""
+    ordered = [MODEL, *MODEL_FALLBACKS]
+    unique: List[str] = []
+    for model_name in ordered:
+        if model_name and model_name not in unique:
+            unique.append(model_name)
+    return unique
+
+
+def _model_accessible(model_name: str) -> bool:
+    """Probe whether the model is available to this API key/account."""
+    try:
+        client.responses.create(
+            model=model_name,
+            input=[{"role": "user", "content": "ping"}],
+            max_output_tokens=1,
+            store=False,
+        )
+        return True
+    except NotFoundError as e:
+        print(f"[DEBUG] Model '{model_name}' unavailable: {e}", flush=True)
+        return False
+    except Exception as e:
+        # Keep trying fallbacks even for non-404 failures.
+        print(f"[DEBUG] Model '{model_name}' probe failed: {type(e).__name__}: {e}", flush=True)
+        return False
+
+
+def select_active_model() -> str:
+    """
+    Test candidate models in order and return the first one that is available.
+    Raises RuntimeError if no candidate model can be used.
+    """
+    candidates = _candidate_models()
+    print(f"[DEBUG] Model preference order: {candidates}", flush=True)
+
+    for model_name in candidates:
+        print(f"[DEBUG] Probing model access: '{model_name}'...", flush=True)
+        if _model_accessible(model_name):
+            print(f"[DEBUG] Using model: '{model_name}'", flush=True)
+            return model_name
+
+    raise RuntimeError(
+        "No configured model is accessible. "
+        f"Tried: {', '.join(candidates)}"
+    )
+
+
 def main():
+    global ACTIVE_MODEL
+
     if len(sys.argv) < 2:
         _usage_exit()
 
@@ -280,6 +345,12 @@ def main():
     print("On the first question, ALL input files are sent to the model.")
     print("Subsequent questions continue the same session (previous_response_id).")
     print("Exit with Ctrl-C.\n")
+
+    try:
+        ACTIVE_MODEL = select_active_model()
+    except RuntimeError as e:
+        print(f"Error selecting model: {e}")
+        sys.exit(1)
 
     previous_response_id: Optional[str] = None
 
