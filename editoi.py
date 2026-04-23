@@ -8,7 +8,8 @@ from openai import OpenAI
 
 # You can swap model here.
 # GPT 5.4 published on 6.3.2026.
-MODEL = "gpt-5.4"
+# GPT 5.5 published on 23.4.2026
+MODEL = "gpt-5.5"
 
 # Max output per single API call
 MAX_OUTPUT_TOKENS = 3000
