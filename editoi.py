@@ -20,6 +20,7 @@ MODEL_FALLBACKS = [
 
 # Max output per single API call
 MAX_OUTPUT_TOKENS = 3000
+MODEL_PROBE_MAX_OUTPUT_TOKENS = 16
 
 # How many automatic follow-up continuations to request at most
 MAX_AUTO_FOLLOWUPS = 10
@@ -279,7 +280,7 @@ def _model_accessible(model_name: str) -> bool:
         client.responses.create(
             model=model_name,
             input=[{"role": "user", "content": "ping"}],
-            max_output_tokens=1,
+            max_output_tokens=MODEL_PROBE_MAX_OUTPUT_TOKENS,
             store=False,
         )
         return True
