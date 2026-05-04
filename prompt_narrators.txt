@@ -12,5 +12,9 @@
   "chat-kaira": "Ky9j3wxFbp3dSAdrkOEv",
   "chat-mod": "BjCmiOq9A2piF1gMic0L",
   "Virtanen": "hU9xpIwLBrQ7ueYNjP7b",
-  "Kuosmanen": "0m71kiyu84bdUcKDzG0L"
+  "Kuosmanen": "0m71kiyu84bdUcKDzG0L",
+  "Sannii": "XdflFrQO8wbGpWMNZHFr",
+  "Reinboth": "pbVD3LqiqlzGqszOvKuT",
+  "Minister": "esy0r39YPLQjOczyOib8",
+  "Mira": "lUCNYQh2kqW2wiie85Qk"
 }
