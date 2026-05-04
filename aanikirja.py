@@ -11,6 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 from urllib import error, request
+import shutil
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
@@ -208,6 +209,14 @@ def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model
         raise RuntimeError(f"HTTP {e.code}: {details}") from e
 
 
+def render_silence(out_path: Path, seconds: float) -> None:
+    cmd = [
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+        "-t", f"{seconds:.2f}", "-q:a", "9", "-acodec", "libmp3lame", str(out_path),
+    ]
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
     parser.add_argument("--input-file", required=True)
@@ -249,10 +258,30 @@ def main() -> int:
         return 2
 
     out_dir = Path(args.out_dir)
-    for i, (speaker, chunk) in enumerate(chunks, start=1):
+    script_dir = Path(args.input_file).resolve().parent
+    part_no = 1
+    for speaker, chunk in chunks:
+        audio_notif = re.search(r'<audio\s+[^>]*src="notification"[^>]*/>', chunk, flags=re.IGNORECASE)
+        if audio_notif:
+            notif_src = script_dir / "notification.mp3"
+            if notif_src.exists():
+                out_path = out_dir / f"{part_no:04d}.mp3"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(notif_src, out_path)
+                print(f"[{part_no}] -> {out_path} (notification.mp3)")
+                part_no += 1
+            break_m = re.search(r'<break\s+[^>]*time="([0-9.]+)s"[^>]*/>', chunk, flags=re.IGNORECASE)
+            pause_s = float(break_m.group(1)) if break_m else 0.15
+            out_path = out_dir / f"{part_no:04d}.mp3"
+            render_silence(out_path, pause_s)
+            print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
+            part_no += 1
+            continue
+
+        i = part_no
         chunk_voice_id = narrators.get(speaker) or voice_id
         out_path = out_dir / f"{i:04d}.mp3"
-        print(f"[{i}/{len(chunks)}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
+        print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
         print("--- 11labs request debug ---")
         print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
         print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
@@ -260,11 +289,7 @@ def main() -> int:
         print(chunk)
         print("--- /11labs request debug ---")
         synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
-
-    if not args.no_merge:
-        merged_path = Path(args.merged_file)
-        print(f"Yhdistetään osat tiedostoon: {merged_path}")
-        merge_mp3_parts(out_dir, merged_path)
+        part_no += 1
 
     if not args.no_merge:
         merged_path = Path(args.merged_file)
