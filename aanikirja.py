@@ -17,6 +17,7 @@ import random
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
+DEFAULT_PRONUNCIATION_FILE = "prompt_pronounciation.txt"
 MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = 9500
 NARRATOR_NAME = "Kertoja"
@@ -28,6 +29,33 @@ def load_narrators(path: Path) -> dict[str, str]:
     if not isinstance(data, dict):
         raise ValueError("Kertojatiedoston pitää olla JSON-objekti.")
     return {str(k): str(v) for k, v in data.items()}
+
+
+def load_pronunciation_locators(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict):
+        locators = data.get("pronunciation_dictionary_locators", [])
+    elif isinstance(data, list):
+        locators = data
+    else:
+        raise ValueError("Ääntämistiedoston pitää olla JSON-lista tai objekti.")
+
+    if not isinstance(locators, list):
+        raise ValueError("pronunciation_dictionary_locators pitää olla lista.")
+
+    cleaned: list[dict[str, str]] = []
+    for item in locators:
+        if not isinstance(item, dict):
+            raise ValueError("Jokaisen ääntämisohjeen pitää olla JSON-objekti.")
+        dict_id = str(item.get("pronunciation_dictionary_id", "")).strip()
+        version_id = str(item.get("version_id", "")).strip()
+        if not dict_id or not version_id:
+            raise ValueError("Ääntämisohjeesta puuttuu pronunciation_dictionary_id tai version_id.")
+        cleaned.append({"pronunciation_dictionary_id": dict_id, "version_id": version_id})
+    return cleaned
 
 
 def strip_speak_wrappers(text: str) -> str:
@@ -199,7 +227,7 @@ def choose_voice_id(speaker: str, narrators: dict[str, str], default_voice_id: s
 
     return default_voice_id
 
-def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool) -> None:
+def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool, pronunciation_locators: list[dict[str, str]]) -> None:
     url = f"{API_BASE}/text-to-speech/{voice_id}/stream"
     headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
     payload = {
@@ -214,6 +242,8 @@ def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model
             "use_speaker_boost": use_speaker_boost,
         },
     }
+    if pronunciation_locators:
+        payload["pronunciation_dictionary_locators"] = pronunciation_locators
     req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
     try:
         with request.urlopen(req, timeout=180) as response:
@@ -237,6 +267,7 @@ def main() -> int:
     parser.add_argument("--input-file", required=True)
     parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto osa-mp3 tiedostoille")
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
+    parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
     parser.add_argument("--voice-name", default="Kertoja")
     parser.add_argument("--voice-id", default=None)
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
@@ -253,6 +284,7 @@ def main() -> int:
 
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
     narrators = load_narrators(Path(args.narrators_file))
+    pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
     voice_id = args.voice_id or narrators.get(args.voice_name)
     if not voice_id:
         print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
@@ -263,6 +295,8 @@ def main() -> int:
     print(f"Voice: {args.voice_name} -> {voice_id}")
     print(f"Model: {args.model} ({model_id})")
     print(f"Chunkit: {len(chunks)} kpl")
+    if pronunciation_locators:
+        print(f"Ääntämissanastoja: {len(pronunciation_locators)} kpl")
 
     if args.dry_run:
         return 0
@@ -315,10 +349,12 @@ def main() -> int:
         print("--- 11labs request debug ---")
         print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
         print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
+        if pronunciation_locators:
+            print(f"pronunciation_dictionary_locators={pronunciation_locators}")
         print("text:")
         print(chunk)
         print("--- /11labs request debug ---")
-        synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+        synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
         part_no += 1
 
     if not args.no_merge:
