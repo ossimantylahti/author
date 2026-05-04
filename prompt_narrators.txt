@@ -2,6 +2,8 @@
   "Kertoja": "Dkbbg7k9Ir9TNzn5GYLp",
   "Miksu":   "6n4YmXLiuP4C7cZqYOJl",
   "Elias": "IKne3meq5aSn9XLyUdCD",
-  "CherryKitten": "qBDvhofpxp92JgXJxDjB",
-  "chat": "bAq8AI9QURijOtmeFFqT"
+  "CherryKitten": "CKfuQaJKfvUG2Wtrda3Y",
+  "chat": "bAq8AI9QURijOtmeFFqT",
+  "chat1": "weA4Q36twV5kwSaTEL0Q",
+  "chat2": "xNtG3W2oqJs0cJZuTyBc"
 }
