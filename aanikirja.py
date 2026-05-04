@@ -262,6 +262,14 @@ def render_silence(out_path: Path, seconds: float) -> None:
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def pop_leading_break_seconds(text: str) -> tuple[str, float | None]:
+    m = re.match(r'^\s*<break\s+[^>]*time="([0-9.]+)s"[^>]*/>\s*', text, flags=re.IGNORECASE)
+    if not m:
+        return text, None
+    remaining = re.sub(r'^\s*<break\s+[^>]*time="[0-9.]+s"[^>]*/>\s*', '', text, count=1, flags=re.IGNORECASE)
+    return remaining, float(m.group(1))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
     parser.add_argument("--input-file", required=True)
@@ -310,8 +318,21 @@ def main() -> int:
     script_dir = Path(args.input_file).resolve().parent
     part_no = 1
     for speaker, chunk in chunks:
-        audio_notif = re.search(r'<audio\s+[^>]*src="notification"[^>]*/>', chunk, flags=re.IGNORECASE)
-        if audio_notif:
+        pending = chunk
+        while True:
+            notif_m = re.search(r'<audio\s+[^>]*src="notification"[^>]*/>', pending, flags=re.IGNORECASE)
+            if not notif_m:
+                break
+
+            before = pending[:notif_m.start()].strip()
+            if before and not is_pause_only_ssml(before):
+                i = part_no
+                chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
+                out_path = out_dir / f"{i:04d}.mp3"
+                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker}")
+                synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                part_no += 1
+
             notif_src = script_dir / "notification.mp3"
             if notif_src.exists():
                 out_path = out_dir / f"{part_no:04d}.mp3"
@@ -320,27 +341,18 @@ def main() -> int:
                 print(f"[{part_no}] -> {out_path} (notification.mp3)")
                 part_no += 1
 
-            # Yleinen chat-rakenne: notification + break + varsinainen ääneen luettava teksti.
-            # Poistetaan notification sekä heti perässä oleva break, mutta säilytetään muu puhe.
-            chunk_after_notif = re.sub(
-                r'<audio\s+[^>]*src="notification"[^>]*/>\s*',
-                '',
-                chunk,
-                count=1,
-                flags=re.IGNORECASE,
-            )
-            break_m = re.match(r'\s*<break\s+[^>]*time="([0-9.]+)s"[^>]*/>\s*', chunk_after_notif, flags=re.IGNORECASE)
-            if break_m:
-                pause_s = float(break_m.group(1))
-                out_path = out_dir / f"{part_no:04d}.mp3"
-                render_silence(out_path, pause_s)
-                print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
-                part_no += 1
-                chunk_after_notif = re.sub(r'^\s*<break\s+[^>]*time="[0-9.]+s"[^>]*/>\s*', '', chunk_after_notif, count=1, flags=re.IGNORECASE)
+            pending = pending[notif_m.end():]
+            pending, pause_s = pop_leading_break_seconds(pending)
+            if pause_s is None:
+                pause_s = 0.2
+            out_path = out_dir / f"{part_no:04d}.mp3"
+            render_silence(out_path, pause_s)
+            print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
+            part_no += 1
 
-            chunk = chunk_after_notif.strip()
-            if not chunk or is_pause_only_ssml(chunk):
-                continue
+        chunk = pending.strip()
+        if not chunk or is_pause_only_ssml(chunk):
+            continue
 
         i = part_no
         chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
