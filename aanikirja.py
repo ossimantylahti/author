@@ -50,6 +50,20 @@ def extract_speaker_segments(body: str) -> list[tuple[str, str]]:
     return segments
 
 
+def force_split_text(text: str, chunk_limit: int) -> list[str]:
+    parts: list[str] = []
+    remaining = text.strip()
+    while len(remaining) > chunk_limit:
+        cut = remaining.rfind(" ", 0, chunk_limit)
+        if cut <= 0:
+            cut = chunk_limit
+        parts.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    if remaining:
+        parts.append(remaining)
+    return parts
+
+
 def split_large_text(text: str, chunk_limit: int) -> list[str]:
     if len(text) <= chunk_limit:
         return [text]
@@ -74,6 +88,16 @@ def split_large_text(text: str, chunk_limit: int) -> list[str]:
 
         part = ""
         for sentence in re.split(r"(?<=[.!?])\s+", block):
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if len(sentence) > chunk_limit:
+                if part:
+                    pieces.append(part)
+                    part = ""
+                pieces.extend(force_split_text(sentence, chunk_limit))
+                continue
+
             cand2 = f"{part} {sentence}".strip() if part else sentence
             if len(cand2) <= chunk_limit:
                 part = cand2
@@ -81,6 +105,7 @@ def split_large_text(text: str, chunk_limit: int) -> list[str]:
                 if part:
                     pieces.append(part)
                 part = sentence
+
         if part:
             current = part
 
