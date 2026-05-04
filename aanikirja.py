@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from urllib import error, request
 import shutil
+import random
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
@@ -184,6 +185,20 @@ def split_ssml_chunks(text: str, chunk_limit: int) -> list[tuple[str, str]]:
     return chunks
 
 
+
+
+def choose_voice_id(speaker: str, narrators: dict[str, str], default_voice_id: str) -> str:
+    direct = narrators.get(speaker)
+    if direct:
+        return direct
+
+    if speaker.lower().startswith("chat"):
+        chat_voices = [vid for name, vid in narrators.items() if name.lower().startswith("chat")]
+        if chat_voices:
+            return random.choice(chat_voices)
+
+    return default_voice_id
+
 def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool) -> None:
     url = f"{API_BASE}/text-to-speech/{voice_id}/stream"
     headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
@@ -279,7 +294,7 @@ def main() -> int:
             continue
 
         i = part_no
-        chunk_voice_id = narrators.get(speaker) or voice_id
+        chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
         out_path = out_dir / f"{i:04d}.mp3"
         print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
         print("--- 11labs request debug ---")
