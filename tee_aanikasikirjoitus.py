@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -72,9 +73,35 @@ def extract_section(docx_path: Path, content_id: str) -> str:
 
 
 def normalize_unknown_characters(text: str, narrators: dict[str, str]) -> tuple[str, list[str]]:
+    chat_pool = [k for k in narrators if k.startswith("chat") and k not in {"chat-mod", "chat-kaira"}]
+    nick_voice: dict[str, str] = {}
+
+    def chat_voice_for_nick(nick: str) -> str:
+        key = nick.strip().lower()
+        if key in nick_voice:
+            return nick_voice[key]
+        if "kaira" in key and "chat-kaira" in narrators:
+            nick_voice[key] = "chat-kaira"
+            return nick_voice[key]
+        if "mod" in key and "chat-mod" in narrators:
+            nick_voice[key] = "chat-mod"
+            return nick_voice[key]
+        if chat_pool:
+            nick_voice[key] = random.choice(chat_pool)
+            return nick_voice[key]
+        nick_voice[key] = "chat" if "chat" in narrators else NARRATOR_NAME
+        return nick_voice[key]
+
     missing: set[str] = set()
     out_lines: list[str] = []
     for line in text.splitlines():
+        nick_match = re.match(r"^\[([^\]]{1,40})\]\s*:\s*(.*)$", line)
+        if nick_match:
+            nick = nick_match.group(1).strip()
+            spoken = nick_match.group(2)
+            out_lines.append(f"{chat_voice_for_nick(nick)}: {spoken}")
+            continue
+
         m = re.match(r"^([A-ZÅÄÖa-zåäö][\wÅÄÖåäö\- ]{0,40}):\s*(.*)$", line)
         if not m:
             out_lines.append(line)

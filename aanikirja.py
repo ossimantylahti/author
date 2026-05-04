@@ -7,9 +7,11 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib import error, request
+import shutil
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
@@ -50,6 +52,20 @@ def extract_speaker_segments(body: str) -> list[tuple[str, str]]:
     return segments
 
 
+def force_split_text(text: str, chunk_limit: int) -> list[str]:
+    parts: list[str] = []
+    remaining = text.strip()
+    while len(remaining) > chunk_limit:
+        cut = remaining.rfind(" ", 0, chunk_limit)
+        if cut <= 0:
+            cut = chunk_limit
+        parts.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    if remaining:
+        parts.append(remaining)
+    return parts
+
+
 def split_large_text(text: str, chunk_limit: int) -> list[str]:
     if len(text) <= chunk_limit:
         return [text]
@@ -74,6 +90,16 @@ def split_large_text(text: str, chunk_limit: int) -> list[str]:
 
         part = ""
         for sentence in re.split(r"(?<=[.!?])\s+", block):
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if len(sentence) > chunk_limit:
+                if part:
+                    pieces.append(part)
+                    part = ""
+                pieces.extend(force_split_text(sentence, chunk_limit))
+                continue
+
             cand2 = f"{part} {sentence}".strip() if part else sentence
             if len(cand2) <= chunk_limit:
                 part = cand2
@@ -81,6 +107,7 @@ def split_large_text(text: str, chunk_limit: int) -> list[str]:
                 if part:
                     pieces.append(part)
                 part = sentence
+
         if part:
             current = part
 
@@ -90,18 +117,69 @@ def split_large_text(text: str, chunk_limit: int) -> list[str]:
     return pieces
 
 
-def split_ssml_chunks(text: str, chunk_limit: int) -> list[str]:
+
+
+def split_voice_segment(segment_text: str, chunk_limit: int) -> list[str]:
+    m = re.match(r'^<voice\s+([^>]*)>(.*)</voice>$', segment_text.strip(), flags=re.IGNORECASE | re.DOTALL)
+    if not m:
+        return split_large_text(segment_text, chunk_limit)
+
+    inner = m.group(2).strip()
+    return [part for part in split_large_text(inner, chunk_limit) if part.strip()]
+
+
+def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
+    part_files = sorted(out_dir.glob('*.mp3'))
+    if not part_files:
+        raise RuntimeError('Ei mp3-osia yhdistettäväksi.')
+
+    list_file = out_dir / 'concat_list.txt'
+    lines = [f"file '{f.resolve()}'" for f in part_files]
+    list_file.write_text("\n".join(lines) + "\n", encoding='utf-8')
+
+    cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
+        '-i', str(list_file), '-c', 'copy', str(merged_path)
+    ]
+    subprocess.run(cmd, check=True)
+
+
+def is_pause_only_ssml(text: str) -> bool:
+    stripped = re.sub(r"<break\b[^>]*/>", "", text, flags=re.IGNORECASE)
+    stripped = re.sub(r"<[^>]+>", "", stripped)
+    return not stripped.strip()
+
+
+def split_ssml_chunks(text: str, chunk_limit: int) -> list[tuple[str, str]]:
     body = strip_speak_wrappers(text)
     segments = extract_speaker_segments(body)
-    chunks: list[str] = []
+    chunks: list[tuple[str, str]] = []
+    pending_pause = ""
+    pending_speaker = NARRATOR_NAME
 
     for speaker, segment_text in segments:
-        _ = speaker
-        for piece in split_large_text(segment_text, chunk_limit):
-            chunk = f"<speak>\n{piece.strip()}\n</speak>"
+        pending_speaker = speaker
+        for piece in split_voice_segment(segment_text, chunk_limit):
+            piece = piece.strip()
+            if not piece:
+                continue
+
+            if is_pause_only_ssml(piece):
+                pending_pause = f"{pending_pause}\n{piece}".strip() if pending_pause else piece
+                continue
+
+            if pending_pause:
+                piece = f"{pending_pause}\n{piece}"
+                pending_pause = ""
+
+            chunk = f"<speak>\n{piece}\n</speak>"
             if len(chunk) > MAX_TEXT_LEN:
                 raise ValueError(f"Chunk liian pitkä 11labsille (>{MAX_TEXT_LEN})")
-            chunks.append(chunk)
+            chunks.append((speaker, chunk))
+
+    if pending_pause and chunks:
+        speaker, last_chunk = chunks[-1]
+        chunks[-1] = (speaker, last_chunk.replace("\n</speak>", f"\n{pending_pause}\n</speak>"))
 
     return chunks
 
@@ -131,6 +209,14 @@ def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model
         raise RuntimeError(f"HTTP {e.code}: {details}") from e
 
 
+def render_silence(out_path: Path, seconds: float) -> None:
+    cmd = [
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+        "-t", f"{seconds:.2f}", "-q:a", "9", "-acodec", "libmp3lame", str(out_path),
+    ]
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
     parser.add_argument("--input-file", required=True)
@@ -146,6 +232,8 @@ def main() -> int:
     parser.add_argument("--style", type=float, default=0.15)
     parser.add_argument("--no-speaker-boost", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-merge", action="store_true", help="Älä yhdistä osia lopuksi")
+    parser.add_argument("--merged-file", default="audiobook.mp3", help="Yhdistetyn mp3:n tiedostonimi")
     args = parser.parse_args()
 
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
@@ -170,10 +258,43 @@ def main() -> int:
         return 2
 
     out_dir = Path(args.out_dir)
-    for i, chunk in enumerate(chunks, start=1):
+    script_dir = Path(args.input_file).resolve().parent
+    part_no = 1
+    for speaker, chunk in chunks:
+        audio_notif = re.search(r'<audio\s+[^>]*src="notification"[^>]*/>', chunk, flags=re.IGNORECASE)
+        if audio_notif:
+            notif_src = script_dir / "notification.mp3"
+            if notif_src.exists():
+                out_path = out_dir / f"{part_no:04d}.mp3"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(notif_src, out_path)
+                print(f"[{part_no}] -> {out_path} (notification.mp3)")
+                part_no += 1
+            break_m = re.search(r'<break\s+[^>]*time="([0-9.]+)s"[^>]*/>', chunk, flags=re.IGNORECASE)
+            pause_s = float(break_m.group(1)) if break_m else 0.15
+            out_path = out_dir / f"{part_no:04d}.mp3"
+            render_silence(out_path, pause_s)
+            print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
+            part_no += 1
+            continue
+
+        i = part_no
+        chunk_voice_id = narrators.get(speaker) or voice_id
         out_path = out_dir / f"{i:04d}.mp3"
-        print(f"[{i}/{len(chunks)}] -> {out_path} ({len(chunk)} merkkiä)")
-        synthesize_one(api_key, voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+        print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
+        print("--- 11labs request debug ---")
+        print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
+        print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
+        print("text:")
+        print(chunk)
+        print("--- /11labs request debug ---")
+        synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+        part_no += 1
+
+    if not args.no_merge:
+        merged_path = Path(args.merged_file)
+        print(f"Yhdistetään osat tiedostoon: {merged_path}")
+        merge_mp3_parts(out_dir, merged_path)
 
     print("Valmis.")
     return 0
