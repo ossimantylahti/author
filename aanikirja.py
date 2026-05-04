@@ -17,7 +17,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import requests
+import json
+from urllib import error, request
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
@@ -131,17 +132,27 @@ def synthesize_one(
     if previous_request_ids:
         payload["previous_request_ids"] = previous_request_ids[-3:]
 
-    with requests.post(url, headers=headers, json=payload, stream=True, timeout=120) as r:
-        if r.status_code >= 400:
-            raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
+    req = request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
 
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
+    try:
+        with request.urlopen(req, timeout=120) as r:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with out_path.open("wb") as f:
+                while True:
+                    chunk = r.read(8192)
+                    if not chunk:
+                        break
                     f.write(chunk)
 
-        return r.headers.get("request-id")
+            return r.headers.get("request-id")
+    except error.HTTPError as e:
+        details = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {e.code}: {details}") from e
 
 
 def merge_mp3s(parts: List[Path], final_path: Path) -> None:
@@ -169,7 +180,7 @@ def merge_mp3s(parts: List[Path], final_path: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs v2 audiobook generator (split + merge)")
     parser.add_argument("--out-dir", default="audio_parts", help="Directory for 0001.mp3, 0002.mp3, ...")
-    parser.add_argument("--final", default="aanikirja_koe.mp3", help="Final merged mp3")
+    parser.add_argument("--final", default="final_merged.mp3", help="Final merged mp3")
     parser.add_argument("--model-id", default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"))
     parser.add_argument("--stability", type=float, default=0.45)
     parser.add_argument("--similarity-boost", type=float, default=0.75)
