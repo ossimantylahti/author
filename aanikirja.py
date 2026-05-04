@@ -1,124 +1,116 @@
 #!/usr/bin/env python3
-"""ElevenLabs v2 audiobook segment generator.
-
-- Generates one MP3 per dialogue line: 0001.mp3, 0002.mp3, ...
-- Uses one voice per API call (works around multi-speaker limitations).
-- Tests pauses + SSML emotion/prosody controls.
-- Merges all generated parts into a single MP3 with ffmpeg.
-"""
+"""ElevenLabs audiobook generator from SSML/text file."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
-
-import json
 from urllib import error, request
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
-
-# You can override these via environment variables if needed.
-VOICES: Dict[str, str] = {
-    "Kertoja": os.getenv("ELEVENLABS_VOICE_KERTOJA", "Dkbbg7k9Ir9TNzn5GYLp"),
-    "Miksu": os.getenv("ELEVENLABS_VOICE_MIKSU", "6n4YmXLiuP4C7cZqYOJl"),
-    "Elias": os.getenv("ELEVENLABS_VOICE_ELIAS", "IKne3meq5aSn9XLyUdCD"),
-}
-
-# (name, ssml_text)
-SCENE: List[Tuple[str, str]] = [
-    (
-        "Kertoja",
-        """
-<speak>
-Vastapäätä istuva Miksu löi kätensä yhteen ja Elias havahtui mietteistään.
-Miksu oli esittänyt hänelle liikeideansa: Miksu alkaisi hänen managerikseen
-ja kaupallistajakseen.
-<break time=\"1.0s\"/>
-</speak>
-""".strip(),
-    ),
-    (
-        "Miksu",
-        """
-<speak>
-<prosody rate=\"104%\" pitch=\"+2st\">Tajuatko sä Elias minkälainen kohu tästä on syntymässä?</prosody>
-<break time=\"0.3s\"/>
-<prosody rate=\"106%\">Sun kanavan tilaajaluvut ovat nousseet jo lähes kolmeensataan</prosody>
-ja Vuosaari-keikan lopusta on klippailtu jo ainakin kymmenelle YouTube-julkaisulle oma osuutensa.
-</speak>
-""".strip(),
-    ),
-    (
-        "Elias",
-        """
-<speak>
-<prosody pitch=\"+3st\" rate=\"95%\">Ai mitä?</prosody>
-</speak>
-""".strip(),
-    ),
-    (
-        "Miksu",
-        """
-<speak>
-Aistivastevideota.
-<break time=\"0.2s\"/>
-Kuvankauniit naiset pulikoivat kahluualtaissa ja kuiskailevat mikrofoniin lempeällä äänellä helliä sanoja.
-<prosody rate=\"96%\" pitch=\"-1st\">Mutta älä siitä välitä, keskitytään nyt suhun.</prosody>
-Oliko siinä Vuosaari-videolla ihan oikeasti ruumis, vai trollasitko vain?
-</speak>
-""".strip(),
-    ),
-    (
-        "Kertoja",
-        """
-<speak>
-Elias ei vastannut heti. Hän katsoi Miksua suoraan silmiin.
-<break time=\"0.6s\"/>
-</speak>
-""".strip(),
-    ),
-    (
-        "Elias",
-        """
-<speak>
-<prosody rate=\"88%\" pitch=\"-1st\">Oli.</prosody>
-<break time=\"1.0s\"/>
-</speak>
-""".strip(),
-    ),
-]
+DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
+MAX_TEXT_LEN = 10000
+DEFAULT_CHUNK_LIMIT = 9500
+NARRATOR_NAME = "Kertoja"
+MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
 
 
-def sanitize_for_log(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+def load_narrators(path: Path) -> dict[str, str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Kertojatiedoston pitää olla JSON-objekti.")
+    return {str(k): str(v) for k, v in data.items()}
 
 
-def synthesize_one(
-    api_key: str,
-    voice_id: str,
-    ssml_text: str,
-    out_path: Path,
-    model_id: str,
-    stability: float,
-    similarity_boost: float,
-    style: float,
-    use_speaker_boost: bool,
-    previous_request_ids: List[str] | None,
-) -> str | None:
+def strip_speak_wrappers(text: str) -> str:
+    t = text.strip()
+    t = re.sub(r"^\s*<speak[^>]*>", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"</speak>\s*$", "", t, flags=re.IGNORECASE)
+    return t.strip()
+
+
+def extract_speaker_segments(body: str) -> list[tuple[str, str]]:
+    pattern = re.compile(r'<voice\s+[^>]*name="([^"]+)"[^>]*>.*?</voice>', re.IGNORECASE | re.DOTALL)
+    segments: list[tuple[str, str]] = []
+    pos = 0
+    for m in pattern.finditer(body):
+        before = body[pos:m.start()].strip()
+        if before:
+            segments.append((NARRATOR_NAME, before))
+        segments.append((m.group(1).strip() or NARRATOR_NAME, m.group(0).strip()))
+        pos = m.end()
+    tail = body[pos:].strip()
+    if tail:
+        segments.append((NARRATOR_NAME, tail))
+    return segments
+
+
+def split_large_text(text: str, chunk_limit: int) -> list[str]:
+    if len(text) <= chunk_limit:
+        return [text]
+
+    pieces: list[str] = []
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
+    current = ""
+
+    for block in blocks:
+        cand = f"{current}\n\n{block}".strip() if current else block
+        if len(cand) <= chunk_limit:
+            current = cand
+            continue
+
+        if current:
+            pieces.append(current)
+            current = ""
+
+        if len(block) <= chunk_limit:
+            current = block
+            continue
+
+        part = ""
+        for sentence in re.split(r"(?<=[.!?])\s+", block):
+            cand2 = f"{part} {sentence}".strip() if part else sentence
+            if len(cand2) <= chunk_limit:
+                part = cand2
+            else:
+                if part:
+                    pieces.append(part)
+                part = sentence
+        if part:
+            current = part
+
+    if current:
+        pieces.append(current)
+
+    return pieces
+
+
+def split_ssml_chunks(text: str, chunk_limit: int) -> list[str]:
+    body = strip_speak_wrappers(text)
+    segments = extract_speaker_segments(body)
+    chunks: list[str] = []
+
+    for speaker, segment_text in segments:
+        _ = speaker
+        for piece in split_large_text(segment_text, chunk_limit):
+            chunk = f"<speak>\n{piece.strip()}\n</speak>"
+            if len(chunk) > MAX_TEXT_LEN:
+                raise ValueError(f"Chunk liian pitkä 11labsille (>{MAX_TEXT_LEN})")
+            chunks.append(chunk)
+
+    return chunks
+
+
+def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool) -> None:
     url = f"{API_BASE}/text-to-speech/{voice_id}/stream"
-    headers = {
-        "xi-api-key": api_key,
-        "accept": "audio/mpeg",
-        "content-type": "application/json",
-    }
+    headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
     payload = {
-        "text": ssml_text,
+        "text": text,
         "model_id": model_id,
         "output_format": OUTPUT_FORMAT,
         "enable_ssml_parsing": True,
@@ -129,111 +121,61 @@ def synthesize_one(
             "use_speaker_boost": use_speaker_boost,
         },
     }
-    if previous_request_ids:
-        payload["previous_request_ids"] = previous_request_ids[-3:]
-
-    req = request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-
+    req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
     try:
-        with request.urlopen(req, timeout=120) as r:
+        with request.urlopen(req, timeout=180) as response:
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            with out_path.open("wb") as f:
-                while True:
-                    chunk = r.read(8192)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-
-            return r.headers.get("request-id")
+            out_path.write_bytes(response.read())
     except error.HTTPError as e:
         details = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {e.code}: {details}") from e
 
 
-def merge_mp3s(parts: List[Path], final_path: Path) -> None:
-    list_file = final_path.parent / "ffmpeg_concat_list.txt"
-    with list_file.open("w", encoding="utf-8") as f:
-        for p in parts:
-            f.write(f"file '{p.resolve()}'\n")
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(list_file),
-        "-c",
-        "copy",
-        str(final_path),
-    ]
-    subprocess.run(cmd, check=True)
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="ElevenLabs v2 audiobook generator (split + merge)")
-    parser.add_argument("--out-dir", default="audio_parts", help="Directory for 0001.mp3, 0002.mp3, ...")
-    parser.add_argument("--final", default="final_merged.mp3", help="Final merged mp3")
-    parser.add_argument("--model-id", default=os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"))
+    parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
+    parser.add_argument("--input-file", required=True)
+    parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto osa-mp3 tiedostoille")
+    parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
+    parser.add_argument("--voice-name", default="Kertoja")
+    parser.add_argument("--voice-id", default=None)
+    parser.add_argument("--model", choices=["v2", "v3"], default="v2")
+    parser.add_argument("--model-id", default=None)
+    parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT)
     parser.add_argument("--stability", type=float, default=0.45)
     parser.add_argument("--similarity-boost", type=float, default=0.75)
     parser.add_argument("--style", type=float, default=0.15)
     parser.add_argument("--no-speaker-boost", action="store_true")
-    parser.add_argument("--dry-run", action="store_true", help="Only print calls, do not hit API")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
+    content = Path(args.input_file).read_text(encoding="utf-8").strip()
+    narrators = load_narrators(Path(args.narrators_file))
+    voice_id = args.voice_id or narrators.get(args.voice_name)
+    if not voice_id:
+        print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
+        return 2
+
+    model_id = args.model_id or MODEL_MAP[args.model]
+    chunks = split_ssml_chunks(content, args.chunk_limit)
+    print(f"Voice: {args.voice_name} -> {voice_id}")
+    print(f"Model: {args.model} ({model_id})")
+    print(f"Chunkit: {len(chunks)} kpl")
+
+    if args.dry_run:
+        return 0
+
     api_key = os.getenv("ELEVENLABS_API_KEY")
-    if not api_key and not args.dry_run:
+    if not api_key:
         print("Virhe: ELEVENLABS_API_KEY puuttuu ympäristöstä.", file=sys.stderr)
         return 2
 
     out_dir = Path(args.out_dir)
-    final_path = Path(args.final)
+    for i, chunk in enumerate(chunks, start=1):
+        out_path = out_dir / f"{i:04d}.mp3"
+        print(f"[{i}/{len(chunks)}] -> {out_path} ({len(chunk)} merkkiä)")
+        synthesize_one(api_key, voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
 
-    generated: List[Path] = []
-    request_ids: List[str] = []
-
-    for i, (speaker, ssml_text) in enumerate(SCENE, start=1):
-        if speaker not in VOICES:
-            raise KeyError(f"Puuttuva voice-id hahmolle: {speaker}")
-
-        part = out_dir / f"{i:04d}.mp3"
-        generated.append(part)
-        print(f"[{i:02d}/{len(SCENE)}] {speaker} -> {part}")
-        print(f"    SSML: {sanitize_for_log(ssml_text)[:120]}...")
-
-        if args.dry_run:
-            continue
-
-        req_id = synthesize_one(
-            api_key=api_key,
-            voice_id=VOICES[speaker],
-            ssml_text=ssml_text,
-            out_path=part,
-            model_id=args.model_id,
-            stability=args.stability,
-            similarity_boost=args.similarity_boost,
-            style=args.style,
-            use_speaker_boost=not args.no_speaker_boost,
-            previous_request_ids=request_ids,
-        )
-        if req_id:
-            request_ids.append(req_id)
-
-    if args.dry_run:
-        print("Dry-run valmis. Ei API-kutsuja eikä yhdistämistä.")
-        return 0
-
-    print("Yhdistetään osat ffmpeg:llä...")
-    merge_mp3s(generated, final_path)
-    print(f"Valmis: {final_path}")
+    print("Valmis.")
     return 0
 
 
