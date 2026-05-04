@@ -266,6 +266,11 @@ def main() -> int:
         print(f"Yhdistetään osat tiedostoon: {merged_path}")
         merge_mp3_parts(out_dir, merged_path)
 
+    if not args.no_merge:
+        merged_path = Path(args.merged_file)
+        print(f"Yhdistetään osat tiedostoon: {merged_path}")
+        merge_mp3_parts(out_dir, merged_path)
+
     print("Valmis.")
     return 0
 
