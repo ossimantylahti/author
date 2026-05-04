@@ -285,13 +285,28 @@ def main() -> int:
                 shutil.copyfile(notif_src, out_path)
                 print(f"[{part_no}] -> {out_path} (notification.mp3)")
                 part_no += 1
-            break_m = re.search(r'<break\s+[^>]*time="([0-9.]+)s"[^>]*/>', chunk, flags=re.IGNORECASE)
-            pause_s = float(break_m.group(1)) if break_m else 0.15
-            out_path = out_dir / f"{part_no:04d}.mp3"
-            render_silence(out_path, pause_s)
-            print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
-            part_no += 1
-            continue
+
+            # Yleinen chat-rakenne: notification + break + varsinainen ääneen luettava teksti.
+            # Poistetaan notification sekä heti perässä oleva break, mutta säilytetään muu puhe.
+            chunk_after_notif = re.sub(
+                r'<audio\s+[^>]*src="notification"[^>]*/>\s*',
+                '',
+                chunk,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+            break_m = re.match(r'\s*<break\s+[^>]*time="([0-9.]+)s"[^>]*/>\s*', chunk_after_notif, flags=re.IGNORECASE)
+            if break_m:
+                pause_s = float(break_m.group(1))
+                out_path = out_dir / f"{part_no:04d}.mp3"
+                render_silence(out_path, pause_s)
+                print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
+                part_no += 1
+                chunk_after_notif = re.sub(r'^\s*<break\s+[^>]*time="[0-9.]+s"[^>]*/>\s*', '', chunk_after_notif, count=1, flags=re.IGNORECASE)
+
+            chunk = chunk_after_notif.strip()
+            if not chunk or is_pause_only_ssml(chunk):
+                continue
 
         i = part_no
         chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
