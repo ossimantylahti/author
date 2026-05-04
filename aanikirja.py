@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from urllib import error, request
@@ -13,11 +14,10 @@ from urllib import error, request
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
-
-MODEL_MAP = {
-    "v2": "eleven_multilingual_v2",
-    "v3": "eleven_v3",
-}
+MAX_TEXT_LEN = 10000
+DEFAULT_CHUNK_LIMIT = 9500
+NARRATOR_NAME = "Kertoja"
+MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
 
 
 def load_narrators(path: Path) -> dict[str, str]:
@@ -27,7 +27,86 @@ def load_narrators(path: Path) -> dict[str, str]:
     return {str(k): str(v) for k, v in data.items()}
 
 
-def synthesize(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool) -> None:
+def strip_speak_wrappers(text: str) -> str:
+    t = text.strip()
+    t = re.sub(r"^\s*<speak[^>]*>", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"</speak>\s*$", "", t, flags=re.IGNORECASE)
+    return t.strip()
+
+
+def extract_speaker_segments(body: str) -> list[tuple[str, str]]:
+    pattern = re.compile(r'<voice\s+[^>]*name="([^"]+)"[^>]*>.*?</voice>', re.IGNORECASE | re.DOTALL)
+    segments: list[tuple[str, str]] = []
+    pos = 0
+    for m in pattern.finditer(body):
+        before = body[pos:m.start()].strip()
+        if before:
+            segments.append((NARRATOR_NAME, before))
+        segments.append((m.group(1).strip() or NARRATOR_NAME, m.group(0).strip()))
+        pos = m.end()
+    tail = body[pos:].strip()
+    if tail:
+        segments.append((NARRATOR_NAME, tail))
+    return segments
+
+
+def split_large_text(text: str, chunk_limit: int) -> list[str]:
+    if len(text) <= chunk_limit:
+        return [text]
+
+    pieces: list[str] = []
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
+    current = ""
+
+    for block in blocks:
+        cand = f"{current}\n\n{block}".strip() if current else block
+        if len(cand) <= chunk_limit:
+            current = cand
+            continue
+
+        if current:
+            pieces.append(current)
+            current = ""
+
+        if len(block) <= chunk_limit:
+            current = block
+            continue
+
+        part = ""
+        for sentence in re.split(r"(?<=[.!?])\s+", block):
+            cand2 = f"{part} {sentence}".strip() if part else sentence
+            if len(cand2) <= chunk_limit:
+                part = cand2
+            else:
+                if part:
+                    pieces.append(part)
+                part = sentence
+        if part:
+            current = part
+
+    if current:
+        pieces.append(current)
+
+    return pieces
+
+
+def split_ssml_chunks(text: str, chunk_limit: int) -> list[str]:
+    body = strip_speak_wrappers(text)
+    segments = extract_speaker_segments(body)
+    chunks: list[str] = []
+
+    for speaker, segment_text in segments:
+        _ = speaker
+        for piece in split_large_text(segment_text, chunk_limit):
+            chunk = f"<speak>\n{piece.strip()}\n</speak>"
+            if len(chunk) > MAX_TEXT_LEN:
+                raise ValueError(f"Chunk liian pitkä 11labsille (>{MAX_TEXT_LEN})")
+            chunks.append(chunk)
+
+    return chunks
+
+
+def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool) -> None:
     url = f"{API_BASE}/text-to-speech/{voice_id}/stream"
     headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
     payload = {
@@ -55,12 +134,13 @@ def synthesize(api_key: str, voice_id: str, text: str, out_path: Path, model_id:
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
     parser.add_argument("--input-file", required=True)
-    parser.add_argument("--out", default="final_merged.mp3")
+    parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto osa-mp3 tiedostoille")
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
-    parser.add_argument("--voice-name", default="Kertoja", help="Hahmon nimi narrators-JSON:stä")
-    parser.add_argument("--voice-id", default=None, help="Yliaja voice-id suoraan")
+    parser.add_argument("--voice-name", default="Kertoja")
+    parser.add_argument("--voice-id", default=None)
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
     parser.add_argument("--model-id", default=None)
+    parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT)
     parser.add_argument("--stability", type=float, default=0.45)
     parser.add_argument("--similarity-boost", type=float, default=0.75)
     parser.add_argument("--style", type=float, default=0.15)
@@ -69,22 +149,17 @@ def main() -> int:
     args = parser.parse_args()
 
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
-    if not content:
-        print("Virhe: syötetiedosto on tyhjä.", file=sys.stderr)
+    narrators = load_narrators(Path(args.narrators_file))
+    voice_id = args.voice_id or narrators.get(args.voice_name)
+    if not voice_id:
+        print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
         return 2
 
-    narrators = load_narrators(Path(args.narrators_file))
-    if args.voice_id:
-        voice_id = args.voice_id
-    else:
-        voice_id = narrators.get(args.voice_name)
-        if not voice_id:
-            print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
-            return 2
-
     model_id = args.model_id or MODEL_MAP[args.model]
+    chunks = split_ssml_chunks(content, args.chunk_limit)
     print(f"Voice: {args.voice_name} -> {voice_id}")
     print(f"Model: {args.model} ({model_id})")
+    print(f"Chunkit: {len(chunks)} kpl")
 
     if args.dry_run:
         return 0
@@ -94,7 +169,12 @@ def main() -> int:
         print("Virhe: ELEVENLABS_API_KEY puuttuu ympäristöstä.", file=sys.stderr)
         return 2
 
-    synthesize(api_key, voice_id, content, Path(args.out), model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+    out_dir = Path(args.out_dir)
+    for i, chunk in enumerate(chunks, start=1):
+        out_path = out_dir / f"{i:04d}.mp3"
+        print(f"[{i}/{len(chunks)}] -> {out_path} ({len(chunk)} merkkiä)")
+        synthesize_one(api_key, voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+
     print("Valmis.")
     return 0
 
