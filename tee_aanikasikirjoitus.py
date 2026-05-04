@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import random
 import re
@@ -75,6 +76,42 @@ def extract_section(docx_path: Path, content_id: str) -> str:
 def normalize_unknown_characters(text: str, narrators: dict[str, str]) -> tuple[str, list[str]]:
     chat_pool = [k for k in narrators if k.startswith("chat") and k not in {"chat-mod", "chat-kaira"}]
     nick_voice: dict[str, str] = {}
+    narrators_by_normalized = {
+        re.sub(r"[^a-z0-9]+", "", key.lower()): key for key in narrators.keys()
+    }
+
+    def resolve_character_name(name: str) -> str | None:
+        if name in narrators:
+            return name
+
+        normalized_name = re.sub(r"[^a-z0-9]+", "", name.lower())
+        if not normalized_name:
+            return None
+
+        # 1) exact normalized match
+        if normalized_name in narrators_by_normalized:
+            return narrators_by_normalized[normalized_name]
+
+        # 2) token/substring matching (e.g. "Sanii Sparkle" -> "Sannii", "Susanna Reinboth" -> "Reinboth")
+        parts = [p for p in re.split(r"[\s\-_]+", name) if p]
+        normalized_parts = [re.sub(r"[^a-z0-9]+", "", p.lower()) for p in parts]
+        normalized_parts = [p for p in normalized_parts if p]
+        for part in normalized_parts:
+            for normalized_key, original_key in narrators_by_normalized.items():
+                if part in normalized_key or normalized_key in part:
+                    return original_key
+
+        # 3) best fuzzy ratio against known narrator keys
+        best_key = None
+        best_score = 0.0
+        for normalized_key, original_key in narrators_by_normalized.items():
+            score = difflib.SequenceMatcher(None, normalized_name, normalized_key).ratio()
+            if score > best_score:
+                best_score = score
+                best_key = original_key
+        if best_key and best_score >= 0.72:
+            return best_key
+        return None
 
     def chat_voice_for_nick(nick: str) -> str:
         key = nick.strip().lower()
@@ -107,8 +144,9 @@ def normalize_unknown_characters(text: str, narrators: dict[str, str]) -> tuple[
             out_lines.append(line)
             continue
         name, spoken = m.group(1).strip(), m.group(2)
-        if name in narrators:
-            out_lines.append(line)
+        matched_name = resolve_character_name(name)
+        if matched_name:
+            out_lines.append(f"{matched_name}: {spoken}")
         else:
             missing.add(name)
             out_lines.append(f"{NARRATOR_NAME}: {spoken}")
