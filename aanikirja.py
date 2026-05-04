@@ -123,10 +123,8 @@ def split_voice_segment(segment_text: str, chunk_limit: int) -> list[str]:
     if not m:
         return split_large_text(segment_text, chunk_limit)
 
-    attrs = m.group(1).strip()
     inner = m.group(2).strip()
-    parts = split_large_text(inner, chunk_limit)
-    return [f"<voice {attrs}>{part}</voice>" for part in parts if part.strip()]
+    return [part for part in split_large_text(inner, chunk_limit) if part.strip()]
 
 
 def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
@@ -144,18 +142,43 @@ def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
     ]
     subprocess.run(cmd, check=True)
 
-def split_ssml_chunks(text: str, chunk_limit: int) -> list[str]:
+
+def is_pause_only_ssml(text: str) -> bool:
+    stripped = re.sub(r"<break\b[^>]*/>", "", text, flags=re.IGNORECASE)
+    stripped = re.sub(r"<[^>]+>", "", stripped)
+    return not stripped.strip()
+
+
+def split_ssml_chunks(text: str, chunk_limit: int) -> list[tuple[str, str]]:
     body = strip_speak_wrappers(text)
     segments = extract_speaker_segments(body)
-    chunks: list[str] = []
+    chunks: list[tuple[str, str]] = []
+    pending_pause = ""
+    pending_speaker = NARRATOR_NAME
 
     for speaker, segment_text in segments:
-        _ = speaker
+        pending_speaker = speaker
         for piece in split_voice_segment(segment_text, chunk_limit):
-            chunk = f"<speak>\n{piece.strip()}\n</speak>"
+            piece = piece.strip()
+            if not piece:
+                continue
+
+            if is_pause_only_ssml(piece):
+                pending_pause = f"{pending_pause}\n{piece}".strip() if pending_pause else piece
+                continue
+
+            if pending_pause:
+                piece = f"{pending_pause}\n{piece}"
+                pending_pause = ""
+
+            chunk = f"<speak>\n{piece}\n</speak>"
             if len(chunk) > MAX_TEXT_LEN:
                 raise ValueError(f"Chunk liian pitkä 11labsille (>{MAX_TEXT_LEN})")
-            chunks.append(chunk)
+            chunks.append((speaker, chunk))
+
+    if pending_pause and chunks:
+        speaker, last_chunk = chunks[-1]
+        chunks[-1] = (speaker, last_chunk.replace("\n</speak>", f"\n{pending_pause}\n</speak>"))
 
     return chunks
 
@@ -226,16 +249,22 @@ def main() -> int:
         return 2
 
     out_dir = Path(args.out_dir)
-    for i, chunk in enumerate(chunks, start=1):
+    for i, (speaker, chunk) in enumerate(chunks, start=1):
+        chunk_voice_id = narrators.get(speaker) or voice_id
         out_path = out_dir / f"{i:04d}.mp3"
-        print(f"[{i}/{len(chunks)}] -> {out_path} ({len(chunk)} merkkiä)")
+        print(f"[{i}/{len(chunks)}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
         print("--- 11labs request debug ---")
-        print(f"voice_id={voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
+        print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
         print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
         print("text:")
         print(chunk)
         print("--- /11labs request debug ---")
-        synthesize_one(api_key, voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+        synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost)
+
+    if not args.no_merge:
+        merged_path = Path(args.merged_file)
+        print(f"Yhdistetään osat tiedostoon: {merged_path}")
+        merge_mp3_parts(out_dir, merged_path)
 
     if not args.no_merge:
         merged_path = Path(args.merged_file)
