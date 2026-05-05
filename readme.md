@@ -66,7 +66,10 @@ Huom: `--pronunciation-file` / PLS-lexicon välittyy vain ElevenLabs-rendererill
 Jos Piper antaa virheen `Unable to find voice`, lataa ääni ensin (esim. Heidi):
 
 ```bash
-python -m piper.download_voices fi_FI-heidi-medium
+python -m piper.download_voices fi_FI-heidi-low
 ```
 
 (Tai valitse jokin muu asennettu Piper-ääni ja anna se `--voice-id`-parametrilla.)
+
+Skripti yrittää nyt ladata puuttuvan Piper-äänen automaattisesti ensimmäisellä ajokerralla.
+Jos `-medium`-mallia ei löydy, skripti kokeilee automaattisesti vastaavaa `-low`-mallia.
