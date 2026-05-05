@@ -32,12 +32,31 @@ def load_narrators(path: Path) -> dict[str, str]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("Narrators-tiedoston pitää olla JSON-objekti")
+
+    if "voices" in data:
+        voices = data.get("voices", {})
+        if not isinstance(voices, dict):
+            raise ValueError("Narrators-tiedoston 'voices' pitää olla objekti")
+        out: dict[str, str] = {}
+        for name, meta in voices.items():
+            if not isinstance(meta, dict):
+                continue
+            ids = meta.get("ids", {})
+            if not isinstance(ids, dict):
+                continue
+            eleven = ids.get("elevenlabs")
+            if eleven:
+                out[str(name)] = str(eleven)
+        if NARRATOR_NAME not in out:
+            raise ValueError(f"Narrators-tiedostossa pitää olla '{NARRATOR_NAME}' elevenlabs-id")
+        return out
+
     if NARRATOR_NAME not in data:
         raise ValueError(f"Narrators-tiedostossa pitää olla '{NARRATOR_NAME}'")
     return {str(k): str(v) for k, v in data.items()}
 
 
-def extract_section(docx_path: Path, content_id: str) -> str:
+def extract_section(docx_path: Path, content_id: str) -> tuple[str, int, int, str]:
     if not re.fullmatch(r"\d+\.\d+", content_id):
         raise ValueError("--content pitää olla muodossa ACT.LUKU, esim. 1.3")
 
@@ -48,6 +67,8 @@ def extract_section(docx_path: Path, content_id: str) -> str:
     chapter = 0
     collecting = False
     lines: list[str] = []
+
+    chapter_title = "luku"
 
     for para in document.paragraphs:
         text = para.text.strip()
@@ -63,6 +84,8 @@ def extract_section(docx_path: Path, content_id: str) -> str:
             if collecting:
                 break
             collecting = act == target_act and chapter == target_chapter
+            if collecting:
+                chapter_title = text or f"Luku {chapter}"
             continue
         if collecting and text:
             lines.append(text)
@@ -70,7 +93,7 @@ def extract_section(docx_path: Path, content_id: str) -> str:
     if not lines:
         raise LookupError(f"Sisältöä ei löytynyt kohdalle {content_id} tiedostosta {docx_path}")
 
-    return "\n\n".join(lines).strip() + "\n"
+    return "\n\n".join(lines).strip() + "\n", target_act, target_chapter, chapter_title
 
 
 def normalize_unknown_characters(text: str, narrators: dict[str, str]) -> tuple[str, list[str]]:
@@ -163,7 +186,7 @@ def main() -> int:
 
     try:
         narrators = load_narrators(Path(args.narrators_file))
-        section = extract_section(Path(args.input), args.content)
+        section, act_no, chapter_no, chapter_title = extract_section(Path(args.input), args.content)
     except (ValueError, LookupError, FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Virhe: {e}", file=sys.stderr)
         return 2
@@ -176,7 +199,9 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    output = Path(args.output) if args.output else Path(f"aanikasikirjoitus_{args.content}.txt")
+    safe_title = re.sub(r"[^A-Za-z0-9ÅÄÖåäö_-]+", "_", chapter_title).strip("_") or "luku"
+    default_name = f"{act_no:02d}_{chapter_no:02d}_{safe_title}.txt"
+    output = Path(args.output) if args.output else Path(default_name)
     output.write_text(normalized + "\n", encoding="utf-8")
     print(f"Kirjoitettu: {output}")
     return 0

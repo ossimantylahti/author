@@ -25,11 +25,14 @@ NARRATOR_NAME = "Kertoja"
 MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
 
 
-def load_narrators(path: Path) -> dict[str, str]:
+def load_narrators(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("Kertojatiedoston pitää olla JSON-objekti.")
-    return {str(k): str(v) for k, v in data.items()}
+    if "voices" in data:
+        return data
+    voices = {name: {"gender": "female", "ids": {"elevenlabs": vid}} for name, vid in data.items()}
+    return {"defaults": {}, "voices": voices}
 
 
 def load_pronunciation_locators(path: Path) -> list[dict[str, str]]:
@@ -64,6 +67,12 @@ def strip_speak_wrappers(text: str) -> str:
     t = re.sub(r"^\s*<speak[^>]*>", "", t, flags=re.IGNORECASE)
     t = re.sub(r"</speak>\s*$", "", t, flags=re.IGNORECASE)
     return t.strip()
+
+
+def strip_ssml_tags(text: str) -> str:
+    text = re.sub(r"<break\b[^>]*/>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def extract_speaker_segments(body: str) -> list[tuple[str, str]]:
@@ -216,16 +225,34 @@ def split_ssml_chunks(text: str, chunk_limit: int) -> list[tuple[str, str]]:
 
 
 
-def choose_voice_id(speaker: str, narrators: dict[str, str], default_voice_id: str) -> str:
-    direct = narrators.get(speaker)
-    if direct:
-        return direct
+def ensure_renderer_installed(renderer: str) -> None:
+    if renderer == "elevenlabs":
+        return
+    binary = "piper" if renderer == "piper" else "kokoro-tts"
+    if shutil.which(binary):
+        return
+    if renderer == "piper":
+        raise RuntimeError("Piper puuttuu. Asenna esim: pip install piper-tts tai sudo apt install piper")
+    raise RuntimeError("Kokoro puuttuu. Asenna esim: pip install kokoro-onnx")
 
-    if speaker.lower().startswith("chat"):
-        chat_voices = [vid for name, vid in narrators.items() if name.lower().startswith("chat")]
+
+def choose_voice_id(speaker: str, narrators: dict[str, Any], renderer: str, default_voice_id: str) -> str:
+    voices = narrators.get("voices", {})
+    speaker_data = voices.get(speaker, {}) if isinstance(voices, dict) else {}
+    if isinstance(speaker_data, dict):
+        ids = speaker_data.get("ids", {})
+        if isinstance(ids, dict) and ids.get(renderer):
+            return str(ids[renderer])
+
+    if speaker.lower().startswith("chat") and isinstance(voices, dict):
+        chat_voices = []
+        for name, meta in voices.items():
+            if str(name).lower().startswith("chat") and isinstance(meta, dict):
+                ids = meta.get("ids", {})
+                if isinstance(ids, dict) and ids.get(renderer):
+                    chat_voices.append(str(ids[renderer]))
         if chat_voices:
             return random.choice(chat_voices)
-
     return default_voice_id
 
 class QuotaExceededError(RuntimeError):
@@ -321,6 +348,7 @@ def main() -> int:
     parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto osa-mp3 tiedostoille")
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
     parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
+    parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro"], default="piper")
     parser.add_argument("--voice-name", default="Kertoja")
     parser.add_argument("--voice-id", default=None)
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
@@ -332,13 +360,28 @@ def main() -> int:
     parser.add_argument("--no-speaker-boost", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-merge", action="store_true", help="Älä yhdistä osia lopuksi")
-    parser.add_argument("--merged-file", default="audiobook.mp3", help="Yhdistetyn mp3:n tiedostonimi")
+    parser.add_argument("--merged-file", default=None, help="Yhdistetyn mp3:n tiedostonimi")
     args = parser.parse_args()
 
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
     narrators = load_narrators(Path(args.narrators_file))
     pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
-    voice_id = args.voice_id or narrators.get(args.voice_name)
+    try:
+        ensure_renderer_installed(args.renderer)
+    except RuntimeError as e:
+        print(f"Virhe: {e}", file=sys.stderr)
+        return 2
+
+    defaults = narrators.get("defaults", {})
+    voices = narrators.get("voices", {})
+    voice_meta = voices.get(args.voice_name, {}) if isinstance(voices, dict) else {}
+    gender = "female"
+    if isinstance(voice_meta, dict):
+        gender = str(voice_meta.get("gender", "female")).lower()
+    gender_defaults = defaults.get(gender, {}) if isinstance(defaults, dict) else {}
+    fallback_voice_id = str(gender_defaults.get(args.renderer, "")).strip()
+
+    voice_id = args.voice_id or choose_voice_id(args.voice_name, narrators, args.renderer, fallback_voice_id)
     if not voice_id:
         print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
         return 2
@@ -354,17 +397,20 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    api_key = os.getenv("ELEVENLABS_API_KEY")
-    if not api_key:
-        print("Virhe: ELEVENLABS_API_KEY puuttuu ympäristöstä.", file=sys.stderr)
-        return 2
-
-    remaining_credits = check_credit_balance(api_key)
-    if remaining_credits is not None and remaining_credits < 10000:
-        print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
+    api_key = ""
+    if args.renderer == "elevenlabs":
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+        if not api_key:
+            print("Virhe: ELEVENLABS_API_KEY puuttuu ympäristöstä.", file=sys.stderr)
+            return 2
+        remaining_credits = check_credit_balance(api_key)
+        if remaining_credits is not None and remaining_credits < 10000:
+            print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
 
     out_dir = Path(args.out_dir)
-    script_dir = Path(args.input_file).resolve().parent
+    script_path = Path(args.input_file).resolve()
+    script_dir = script_path.parent
+    chapter_prefix = script_path.stem
     part_no = 1
     quota_exhausted = False
     for speaker, chunk in chunks:
@@ -377,11 +423,16 @@ def main() -> int:
             before = pending[:notif_m.start()].strip()
             if before and not is_pause_only_ssml(before):
                 i = part_no
-                chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
-                out_path = out_dir / f"{i:04d}.mp3"
+                chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
+                out_path = out_dir / f"{chapter_prefix}_{i:04d}.mp3"
                 print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker}")
                 try:
-                    synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                    if args.renderer == "elevenlabs":
+                        synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                    elif args.renderer == "piper":
+                        subprocess.run(["piper", "--model", chunk_voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(before), text=True, check=True)
+                    else:
+                        subprocess.run(["kokoro-tts", "--voice", chunk_voice_id, "--output", str(out_path), strip_ssml_tags(before)], check=True)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -390,7 +441,7 @@ def main() -> int:
 
             notif_src = script_dir / "notification.mp3"
             if notif_src.exists():
-                out_path = out_dir / f"{part_no:04d}.mp3"
+                out_path = out_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(notif_src, out_path)
                 print(f"[{part_no}] -> {out_path} (notification.mp3)")
@@ -403,7 +454,7 @@ def main() -> int:
             pending, pause_s = pop_leading_break_seconds(pending)
             if pause_s is None:
                 pause_s = 0.2
-            out_path = out_dir / f"{part_no:04d}.mp3"
+            out_path = out_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
             render_silence(out_path, pause_s)
             print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
             part_no += 1
@@ -413,8 +464,8 @@ def main() -> int:
             continue
 
         i = part_no
-        chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
-        out_path = out_dir / f"{i:04d}.mp3"
+        chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
+        out_path = out_dir / f"{chapter_prefix}_{i:04d}.mp3"
         print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
         print("--- 11labs request debug ---")
         print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
@@ -425,7 +476,12 @@ def main() -> int:
         print(chunk)
         print("--- /11labs request debug ---")
         try:
-            synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+            if args.renderer == "elevenlabs":
+                synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+            elif args.renderer == "piper":
+                subprocess.run(["piper", "--model", chunk_voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(chunk), text=True, check=True)
+            else:
+                subprocess.run(["kokoro-tts", "--voice", chunk_voice_id, "--output", str(out_path), strip_ssml_tags(chunk)], check=True)
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
             quota_exhausted = True
@@ -438,7 +494,7 @@ def main() -> int:
     if not args.no_merge:
         part_files = sorted(out_dir.glob("*.mp3"))
         if part_files:
-            merged_path = Path(args.merged_file)
+            merged_path = Path(args.merged_file) if args.merged_file else Path(f"{chapter_prefix}_fullchapter.mp3")
             print(f"Yhdistetään osat tiedostoon: {merged_path}")
             merge_mp3_parts(out_dir, merged_path)
         else:
