@@ -580,8 +580,13 @@ def main() -> int:
                         print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
                     else:
                         frag_text = str(value)
+                        if is_pause_only_ssml(frag_text):
+                            continue
+                        clean_text = strip_ssml_tags(frag_text)
+                        if not clean_text:
+                            continue
                         print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker}")
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, frag_text, out_path)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
