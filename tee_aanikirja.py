@@ -168,36 +168,44 @@ def split_voice_segment(segment_text: str, chunk_limit: int) -> list[str]:
 
 
 def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
-    part_files = sorted(out_dir.glob('*.mp3'))
+    part_files = sorted(out_dir.glob("*.mp3"))
     if not part_files:
-        raise RuntimeError('Ei mp3-osia yhdistettäväksi.')
+        raise RuntimeError("Ei mp3-osia yhdistettäväksi.")
 
-    list_file = out_dir / 'concat_list.txt'
+    list_file = out_dir / "concat_list.txt"
     lines = [f"file '{f.resolve()}'" for f in part_files]
-    list_file.write_text("\n".join(lines) + "\n", encoding='utf-8')
+    list_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    copy_cmd = [
-        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
-        '-i', str(list_file), '-c', 'copy', str(merged_path)
+    # IMPORTANT:
+    # Piper may write WAV/PCM audio even when the filename ends in .mp3.
+    # Silence files are generated as real MP3.
+    # Therefore stream-copy concatenation (-c copy) can create corrupt audio
+    # and audible spikes at boundaries. Always decode and re-encode.
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_file),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "128k",
+        str(merged_path),
     ]
     try:
-        subprocess.run(copy_cmd, check=True, capture_output=True, text=True)
-        return
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        print(
-            'Varoitus: ffmpeg copy-merge epäonnistui, yritetään uudelleenenkoodausta MP3:ksi...',
-            file=sys.stderr,
-        )
-
-    reencode_cmd = [
-        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
-        '-i', str(list_file), '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', str(merged_path)
-    ]
-    try:
-        subprocess.run(reencode_cmd, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        details = (e.stderr or e.stdout or '').strip()
-        raise RuntimeError(f'Osien yhdistäminen epäonnistui ffmpeg:llä: {details}') from e
+        details = (e.stderr or e.stdout or "").strip()
+        raise RuntimeError(f"Osien yhdistäminen epäonnistui ffmpeg:llä: {details}") from e
 
 
 def is_pause_only_ssml(text: str) -> bool:
