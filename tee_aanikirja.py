@@ -236,6 +236,22 @@ def ensure_renderer_installed(renderer: str) -> None:
     raise RuntimeError("Kokoro puuttuu. Asenna esim: pip install kokoro-onnx")
 
 
+
+
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path) -> None:
+    try:
+        if renderer == "piper":
+            subprocess.run(["piper", "--model", voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(text), text=True, check=True)
+        else:
+            subprocess.run(["kokoro-tts", "--voice", voice_id, "--output", str(out_path), strip_ssml_tags(text)], check=True)
+    except subprocess.CalledProcessError as e:
+        if renderer == "piper":
+            raise RuntimeError(
+                f"Piper-ääntä '{voice_id}' ei löytynyt paikallisesti. "
+                f"Lataa se ensin: python -m piper.download_voices {voice_id}"
+            ) from e
+        raise RuntimeError(f"Kokoro-ajo epäonnistui äänellä '{voice_id}'.") from e
+
 def choose_voice_id(speaker: str, narrators: dict[str, Any], renderer: str, default_voice_id: str) -> str:
     voices = narrators.get("voices", {})
     speaker_data = voices.get(speaker, {}) if isinstance(voices, dict) else {}
@@ -429,14 +445,15 @@ def main() -> int:
                 try:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
-                    elif args.renderer == "piper":
-                        subprocess.run(["piper", "--model", chunk_voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(before), text=True, check=True)
                     else:
-                        subprocess.run(["kokoro-tts", "--voice", chunk_voice_id, "--output", str(out_path), strip_ssml_tags(before)], check=True)
+                        synthesize_local(args.renderer, chunk_voice_id, before, out_path)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
                     break
+                except RuntimeError as e:
+                    print(f"Virhe: {e}", file=sys.stderr)
+                    return 2
                 part_no += 1
 
             notif_src = script_dir / "notification.mp3"
@@ -467,25 +484,27 @@ def main() -> int:
         chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
         out_path = out_dir / f"{chapter_prefix}_{i:04d}.mp3"
         print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
-        print("--- 11labs request debug ---")
-        print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
-        print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
-        if pronunciation_locators:
-            print(f"pronunciation_dictionary_locators={pronunciation_locators}")
-        print("text:")
-        print(chunk)
-        print("--- /11labs request debug ---")
+        if args.renderer == "elevenlabs":
+            print("--- 11labs request debug ---")
+            print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
+            print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
+            if pronunciation_locators:
+                print(f"pronunciation_dictionary_locators={pronunciation_locators}")
+            print("text:")
+            print(chunk)
+            print("--- /11labs request debug ---")
         try:
             if args.renderer == "elevenlabs":
                 synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
-            elif args.renderer == "piper":
-                subprocess.run(["piper", "--model", chunk_voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(chunk), text=True, check=True)
             else:
-                subprocess.run(["kokoro-tts", "--voice", chunk_voice_id, "--output", str(out_path), strip_ssml_tags(chunk)], check=True)
+                synthesize_local(args.renderer, chunk_voice_id, chunk, out_path)
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
             quota_exhausted = True
             break
+        except RuntimeError as e:
+            print(f"Virhe: {e}", file=sys.stderr)
+            return 2
         part_no += 1
 
         if quota_exhausted:
