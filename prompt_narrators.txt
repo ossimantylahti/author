@@ -2,7 +2,7 @@
   "defaults": {
     "male": {
       "elevenlabs": "HfRP3cIhYLmeNHeTvkWK",
-      "piper": "fi_FI-harri-low",
+      "piper": "fi_FI-harri-medium",
       "kokoro": "fi_matti"
     },
     "female": {
@@ -12,23 +12,23 @@
     }
   },
   "voices": {
-    "Kertoja": {"gender": "female", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "Miksu": {"gender": "male", "ids": {"elevenlabs": "HfRP3cIhYLmeNHeTvkWK", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
-    "Elias": {"gender": "male", "ids": {"elevenlabs": "IKne3meq5aSn9XLyUdCD", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
+    "Kertoja": {"gender": "male", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-alan-medium", "kokoro": "fi_aino"}},
+    "Miksu": {"gender": "male", "ids": {"elevenlabs": "HfRP3cIhYLmeNHeTvkWK", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
+    "Elias": {"gender": "male", "ids": {"elevenlabs": "IKne3meq5aSn9XLyUdCD", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "CherryKitten": {"gender": "female", "ids": {"elevenlabs": "CKfuQaJKfvUG2Wtrda3Y", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "chat": {"gender": "female", "ids": {"elevenlabs": "bAq8AI9QURijOtmeFFqT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "chat1": {"gender": "female", "ids": {"elevenlabs": "weA4Q36twV5kwSaTEL0Q", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat2": {"gender": "male", "ids": {"elevenlabs": "xNtG3W2oqJs0cJZuTyBc", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
-    "chat3": {"gender": "male", "ids": {"elevenlabs": "eWNJGO7R0mtZgW8BqJYN", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
+    "chat2": {"gender": "male", "ids": {"elevenlabs": "xNtG3W2oqJs0cJZuTyBc", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
+    "chat3": {"gender": "male", "ids": {"elevenlabs": "eWNJGO7R0mtZgW8BqJYN", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "chat4": {"gender": "female", "ids": {"elevenlabs": "3dmeMOtCk4YVlhVD8Q5I", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat5": {"gender": "male", "ids": {"elevenlabs": "dOdGri2hgsKdUEaU09Ct", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
+    "chat5": {"gender": "male", "ids": {"elevenlabs": "dOdGri2hgsKdUEaU09Ct", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "chat-kaira": {"gender": "female", "ids": {"elevenlabs": "Ky9j3wxFbp3dSAdrkOEv", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat-mod": {"gender": "male", "ids": {"elevenlabs": "BjCmiOq9A2piF1gMic0L", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
-    "Virtanen": {"gender": "male", "ids": {"elevenlabs": "hU9xpIwLBrQ7ueYNjP7b", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
-    "Kuosmanen": {"gender": "male", "ids": {"elevenlabs": "0m71kiyu84bdUcKDzG0L", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
+    "chat-mod": {"gender": "male", "ids": {"elevenlabs": "BjCmiOq9A2piF1gMic0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
+    "Virtanen": {"gender": "male", "ids": {"elevenlabs": "hU9xpIwLBrQ7ueYNjP7b", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
+    "Kuosmanen": {"gender": "male", "ids": {"elevenlabs": "0m71kiyu84bdUcKDzG0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Sannii": {"gender": "female", "ids": {"elevenlabs": "XdflFrQO8wbGpWMNZHFr", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "Reinboth": {"gender": "female", "ids": {"elevenlabs": "pbVD3LqiqlzGqszOvKuT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "Minister": {"gender": "male", "ids": {"elevenlabs": "esy0r39YPLQjOczyOib8", "piper": "fi_FI-harri-low", "kokoro": "fi_matti"}},
+    "Minister": {"gender": "male", "ids": {"elevenlabs": "esy0r39YPLQjOczyOib8", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Mira": {"gender": "female", "ids": {"elevenlabs": "lUCNYQh2kqW2wiie85Qk", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}}
   }
 }
