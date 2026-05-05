@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib import error, request
 import shutil
 import random
+from typing import Any
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
@@ -227,6 +228,48 @@ def choose_voice_id(speaker: str, narrators: dict[str, str], default_voice_id: s
 
     return default_voice_id
 
+class QuotaExceededError(RuntimeError):
+    """Raised when ElevenLabs quota is exhausted for current request."""
+
+
+def parse_http_json(details: str) -> Any:
+    try:
+        return json.loads(details)
+    except json.JSONDecodeError:
+        return None
+
+
+def extract_quota_status(details: str) -> str | None:
+    payload = parse_http_json(details)
+    if not isinstance(payload, dict):
+        return None
+    detail = payload.get("detail")
+    if isinstance(detail, dict):
+        status = detail.get("status")
+        if isinstance(status, str):
+            return status
+    return None
+
+
+def check_credit_balance(api_key: str) -> int | None:
+    url = f"{API_BASE}/user/subscription"
+    headers = {"xi-api-key": api_key, "accept": "application/json"}
+    req = request.Request(url, headers=headers, method="GET")
+    try:
+        with request.urlopen(req, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    limit = payload.get("character_limit")
+    used = payload.get("character_count")
+    if not isinstance(limit, int) or not isinstance(used, int):
+        return None
+    return limit - used
+
+
 def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool, pronunciation_locators: list[dict[str, str]]) -> None:
     url = f"{API_BASE}/text-to-speech/{voice_id}/stream"
     headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
@@ -251,6 +294,8 @@ def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model
             out_path.write_bytes(response.read())
     except error.HTTPError as e:
         details = e.read().decode("utf-8", errors="replace")
+        if e.code in {401, 402} and extract_quota_status(details) == "quota_exceeded":
+            raise QuotaExceededError(f"HTTP {e.code}: {details}") from e
         raise RuntimeError(f"HTTP {e.code}: {details}") from e
 
 
@@ -314,9 +359,14 @@ def main() -> int:
         print("Virhe: ELEVENLABS_API_KEY puuttuu ympäristöstä.", file=sys.stderr)
         return 2
 
+    remaining_credits = check_credit_balance(api_key)
+    if remaining_credits is not None and remaining_credits < 10000:
+        print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
+
     out_dir = Path(args.out_dir)
     script_dir = Path(args.input_file).resolve().parent
     part_no = 1
+    quota_exhausted = False
     for speaker, chunk in chunks:
         pending = chunk
         while True:
@@ -330,7 +380,12 @@ def main() -> int:
                 chunk_voice_id = choose_voice_id(speaker, narrators, voice_id)
                 out_path = out_dir / f"{i:04d}.mp3"
                 print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker}")
-                synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                try:
+                    synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                except QuotaExceededError as e:
+                    print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
+                    quota_exhausted = True
+                    break
                 part_no += 1
 
             notif_src = script_dir / "notification.mp3"
@@ -340,6 +395,9 @@ def main() -> int:
                 shutil.copyfile(notif_src, out_path)
                 print(f"[{part_no}] -> {out_path} (notification.mp3)")
                 part_no += 1
+
+            if quota_exhausted:
+                break
 
             pending = pending[notif_m.end():]
             pending, pause_s = pop_leading_break_seconds(pending)
@@ -366,13 +424,29 @@ def main() -> int:
         print("text:")
         print(chunk)
         print("--- /11labs request debug ---")
-        synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+        try:
+            synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+        except QuotaExceededError as e:
+            print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
+            quota_exhausted = True
+            break
         part_no += 1
 
+        if quota_exhausted:
+            break
+
     if not args.no_merge:
-        merged_path = Path(args.merged_file)
-        print(f"Yhdistetään osat tiedostoon: {merged_path}")
-        merge_mp3_parts(out_dir, merged_path)
+        part_files = sorted(out_dir.glob("*.mp3"))
+        if part_files:
+            merged_path = Path(args.merged_file)
+            print(f"Yhdistetään osat tiedostoon: {merged_path}")
+            merge_mp3_parts(out_dir, merged_path)
+        else:
+            print("Ei yhdistettäviä osia.", file=sys.stderr)
+
+    if quota_exhausted:
+        print("Valmis osittain: krediitit loppuivat, mutta tähän asti tuotetut osat yhdistettiin.")
+        return 1
 
     print("Valmis.")
     return 0
