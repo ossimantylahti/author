@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import html
 import json
 import math
+import os
 import random
 import re
 import sys
 from pathlib import Path
 
 from docx import Document
+from openai import OpenAI
 
 NARRATOR_NAME = "Kertoja"
 LANGUAGE_ALIASES = {
@@ -27,6 +30,20 @@ LANGUAGE_ALIASES = {
     "spanish": "spanish",
     "espanol": "spanish",
 }
+MAX_FRAGMENT_LEN = 9500
+EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F6FF"
+    "\U0001F700-\U0001F77F"
+    "\U0001F780-\U0001F7FF"
+    "\U0001F800-\U0001F8FF"
+    "\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U000024C2-\U0001F251"
+    "]+",
+    flags=re.UNICODE,
+)
 
 
 def style_level(style_name: str) -> int | None:
@@ -231,12 +248,126 @@ def add_language_attribute(text: str, forced_language: str | None = None) -> str
     return voice_pattern.sub(repl, text)
 
 
+def infer_chat_emotion(line: str, emojis: list[str]) -> str:
+    combo = "".join(emojis)
+    lowered = line.lower()
+    if any(x in combo for x in ["😂", "😏", "🙃", "😼"]) or "lol" in lowered:
+        return "mocking"
+    if any(x in combo for x in ["😨", "😱", "😰", "😬"]) or "apua" in lowered:
+        return "fearful"
+    if any(x in combo for x in ["😡", "🤬", "👿"]):
+        return "angry"
+    if any(x in combo for x in ["😍", "❤️", "🥰"]):
+        return "excited"
+    return "neutral"
+
+
+def escape_xml_text(text: str) -> str:
+    return html.escape(text, quote=False)
+
+
+def split_plain_text(text: str, limit: int = MAX_FRAGMENT_LEN) -> list[str]:
+    text = text.strip()
+    if len(text) <= limit:
+        return [text] if text else []
+    parts: list[str] = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= limit:
+            parts.append(remaining.strip())
+            break
+        cut = remaining.rfind(" ", 0, limit)
+        if cut <= 0:
+            cut = limit
+        parts.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    return [p for p in parts if p]
+
+
+def annotate_with_openai(lines: list[dict[str, str]], model: str) -> list[dict[str, str]]:
+    if not os.getenv("OPENAI_API_KEY"):
+        return lines
+    client = OpenAI()
+    payload = [{"speaker": x["speaker"], "text": x["text"], "is_chat": x["is_chat"]} for x in lines]
+    prompt = (
+        "Analyze each dialogue line and return a JSON array in the same order. "
+        "Fields: language (e.g. finnish/english/spanish), emotion (1-2 words, English), cleaned_text "
+        "(same text content without speaker names). No explanations."
+    )
+    rsp = client.responses.create(
+        model=model,
+        input=[{"role": "system", "content": prompt}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+    )
+    content = rsp.output_text
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, list) and len(parsed) == len(lines):
+            for row, meta in zip(lines, parsed):
+                if isinstance(meta, dict):
+                    row["language"] = str(meta.get("language") or row["language"])
+                    row["emotion"] = str(meta.get("emotion") or row["emotion"])
+                    row["text"] = str(meta.get("cleaned_text") or row["text"])
+    except json.JSONDecodeError:
+        return lines
+    return lines
+
+
+def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai_model: str) -> list[str]:
+    normalized, _ = normalize_unknown_characters(text, narrators)
+    chat_pool = [k for k in narrators if re.fullmatch(r"chat\d*", k)]
+    nick_voice: dict[str, str] = {}
+    parsed: list[dict[str, str]] = []
+    for raw in normalized.splitlines():
+        if not raw.strip():
+            continue
+        m = re.match(r"^([^:]+):\s*(.*)$", raw)
+        if m:
+            speaker, spoken = m.group(1).strip(), m.group(2).strip()
+        else:
+            speaker, spoken = NARRATOR_NAME, raw.strip()
+        original = spoken
+        emojis = EMOJI_RE.findall(spoken)
+        spoken = EMOJI_RE.sub("", spoken).strip()
+        is_chat = speaker.startswith("chat")
+        if is_chat:
+            nick = speaker
+            if nick in {"chat-kaira", "chat-mod"}:
+                voice = nick
+            elif nick in nick_voice:
+                voice = nick_voice[nick]
+            else:
+                voice = random.choice(chat_pool) if chat_pool else "chat"
+                nick_voice[nick] = voice
+            speaker = voice
+            emotion = infer_chat_emotion(original, emojis)
+        else:
+            emotion = "neutraali"
+        parsed.append(
+            {"speaker": speaker, "text": spoken, "language": detect_language_name(spoken), "emotion": emotion, "is_chat": "1" if is_chat else "0"}
+        )
+    parsed = annotate_with_openai(parsed, ai_model)
+    out: list[str] = []
+    if pls_path:
+        out.append(f'<lexicon uri="{escape_xml_text(pls_path)}" />')
+    for row in parsed:
+        prefix = '<audio src="notification.mp3" /> ' if row["is_chat"] == "1" else ""
+        chunks = split_plain_text(row["text"], MAX_FRAGMENT_LEN)
+        for idx, chunk in enumerate(chunks):
+            chunk_prefix = prefix if idx == 0 else ""
+            out.append(
+                f'<voice name="{escape_xml_text(row["speaker"])}" language="{escape_xml_text(row["language"])}" emotion="{escape_xml_text(row["emotion"])}">{chunk_prefix}{escape_xml_text(chunk)}</voice>'
+            )
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
     parser.add_argument("--input", required=True, help="Syöte .docx")
     parser.add_argument("--content", required=True, help="Muotoa ACT.LUKU, esim. 1.3")
     parser.add_argument("--output", default=None, help="Tulostiedosto (txt)")
     parser.add_argument("--narrators-file", default="prompt_narrators.txt")
+    parser.add_argument("--pronunciation-dictionary", default=None, help="PLS pronunciation dictionary URI/polku")
+    parser.add_argument("--openai-model", default="gpt-5-mini")
     parser.add_argument(
         "--voice-language",
         default=None,
@@ -255,6 +386,8 @@ def main() -> int:
         return 2
 
     normalized, missing = normalize_unknown_characters(section, narrators)
+    ssml_lines = to_ssml_lines(section, narrators, args.pronunciation_dictionary, args.openai_model)
+    normalized = "<speak>\n" + "\n".join(ssml_lines) + "\n</speak>\n"
     if args.voice_language is not None:
         normalized = add_language_attribute(normalized, args.voice_language)
     if missing:
@@ -267,7 +400,7 @@ def main() -> int:
     safe_title = re.sub(r"[^A-Za-z0-9ÅÄÖåäö_-]+", "_", chapter_title).strip("_") or "luku"
     default_name = f"{act_no:02d}_{chapter_no:02d}_{safe_title}.txt"
     output = Path(args.output) if args.output else Path(default_name)
-    output.write_text(normalized + "\n", encoding="utf-8")
+    output.write_text(normalized, encoding="utf-8")
     print(f"Kirjoitettu: {output}")
     return 0
 
