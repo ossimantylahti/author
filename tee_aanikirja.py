@@ -17,7 +17,7 @@ import random
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
-DEFAULT_PRONUNCIATION_FILE = "prompt_pronounciation.txt"
+DEFAULT_PRONUNCIATION_FILE = "prompt_pronunciation.txt"
 MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = 9500
 NARRATOR_NAME = "Kertoja"
