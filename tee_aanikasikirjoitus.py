@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import math
 import random
 import re
 import sys
@@ -14,6 +15,18 @@ from pathlib import Path
 from docx import Document
 
 NARRATOR_NAME = "Kertoja"
+LANGUAGE_ALIASES = {
+    "fi": "finnish",
+    "finnish": "finnish",
+    "suomi": "finnish",
+    "en": "english",
+    "eng": "english",
+    "english": "english",
+    "es": "spanish",
+    "spa": "spanish",
+    "spanish": "spanish",
+    "espanol": "spanish",
+}
 
 
 def style_level(style_name: str) -> int | None:
@@ -176,12 +189,62 @@ def normalize_unknown_characters(text: str, narrators: dict[str, str]) -> tuple[
     return "\n".join(out_lines), sorted(missing)
 
 
+def detect_language_name(text: str) -> str:
+    lowered = text.lower()
+    tokens = re.findall(r"[a-zåäö]+", lowered)
+    if not tokens:
+        return "finnish"
+
+    english_markers = {"the", "and", "with", "viewers", "counter", "strike", "reaction", "chat"}
+    spanish_markers = {"la", "el", "de", "que", "y", "banda"}
+    finnish_markers = {"on", "ja", "että", "oli", "mutta", "tunnettiin", "nimimerkillä"}
+
+    en_score = sum(1 for t in tokens if t in english_markers)
+    es_score = sum(1 for t in tokens if t in spanish_markers)
+    fi_score = sum(1 for t in tokens if t in finnish_markers)
+
+    diacritics = sum(1 for ch in lowered if ch in "åäö")
+    fi_score += diacritics * 0.6
+
+    if math.isclose(en_score, es_score) and en_score > fi_score and " la " in f" {lowered} ":
+        es_score += 0.2
+
+    if fi_score >= en_score and fi_score >= es_score:
+        return "finnish"
+    if en_score >= es_score:
+        return "english"
+    return "spanish"
+
+
+def add_language_attribute(text: str, forced_language: str | None = None) -> str:
+    forced = LANGUAGE_ALIASES.get(forced_language.lower(), forced_language.lower()) if forced_language else None
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group("attrs")
+        body = match.group("body")
+        if re.search(r"\blanguage\s*=", attrs):
+            return match.group(0)
+        language = forced or detect_language_name(body)
+        return f'<voice{attrs} language="{language}">{body}</voice>'
+
+    voice_pattern = re.compile(r"<voice(?P<attrs>[^>]*)>(?P<body>.*?)</voice>", re.DOTALL)
+    return voice_pattern.sub(repl, text)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
     parser.add_argument("--input", required=True, help="Syöte .docx")
     parser.add_argument("--content", required=True, help="Muotoa ACT.LUKU, esim. 1.3")
     parser.add_argument("--output", default=None, help="Tulostiedosto (txt)")
     parser.add_argument("--narrators-file", default="prompt_narrators.txt")
+    parser.add_argument(
+        "--voice-language",
+        default=None,
+        help=(
+            "Lisää puuttuva language-attribuutti <voice>-tageihin. "
+            "Anna kieli (esim. fi/en/es) pakotettuna tai jätä tyhjäksi automaattitulkitsemista varten."
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -192,6 +255,8 @@ def main() -> int:
         return 2
 
     normalized, missing = normalize_unknown_characters(section, narrators)
+    if args.voice_language is not None:
+        normalized = add_language_attribute(normalized, args.voice_language)
     if missing:
         print(
             f"Virhe: seuraavat hahmot puuttuvat tiedostosta {args.narrators_file}: {', '.join(missing)}. "
