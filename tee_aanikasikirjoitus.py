@@ -31,6 +31,8 @@ LANGUAGE_ALIASES = {
     "espanol": "spanish",
 }
 MAX_FRAGMENT_LEN = 9500
+INTER_CHUNK_BREAK = "0.4s"
+INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile(
     "["
     "\U0001F300-\U0001F6FF"
@@ -261,6 +263,30 @@ def infer_chat_emotion(line: str, emojis: list[str]) -> str:
         return "excited"
     return "neutral"
 
+def infer_pace_and_tone(emotion: str, is_chat: bool) -> tuple[str, str]:
+    emotion_key = emotion.strip().lower()
+    pace = "medium"
+    tone = "neutral"
+
+    if emotion_key in {"angry", "viha", "vihainen"}:
+        pace, tone = "fast", "intense"
+    elif emotion_key in {"fearful", "pelokas"}:
+        pace, tone = "medium", "tense"
+    elif emotion_key in {"excited", "innostunut", "riemukas"}:
+        pace, tone = "fast", "bright"
+    elif emotion_key in {"mocking", "ironinen"}:
+        pace, tone = "medium", "playful"
+    elif emotion_key in {"surullinen", "sad"}:
+        pace, tone = "slow", "soft"
+    elif emotion_key in {"neutraali", "neutral"}:
+        pace, tone = ("medium", "neutral")
+
+    if is_chat and pace == "medium" and tone == "neutral":
+        pace, tone = "fast", "light"
+    return pace, tone
+
+
+
 
 def escape_xml_text(text: str) -> str:
     return html.escape(text, quote=False)
@@ -343,20 +369,32 @@ def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai
         else:
             emotion = "neutraali"
         parsed.append(
-            {"speaker": speaker, "text": spoken, "language": detect_language_name(spoken), "emotion": emotion, "is_chat": "1" if is_chat else "0"}
+            {
+                "speaker": speaker,
+                "text": spoken,
+                "language": detect_language_name(spoken),
+                "emotion": emotion,
+                "is_chat": "1" if is_chat else "0",
+            }
         )
     parsed = annotate_with_openai(parsed, ai_model)
     out: list[str] = []
     if pls_path:
         out.append(f'<lexicon uri="{escape_xml_text(pls_path)}" />')
-    for row in parsed:
+    for row_idx, row in enumerate(parsed):
         prefix = '<audio src="notification.mp3" /> ' if row["is_chat"] == "1" else ""
+        pace, tone = infer_pace_and_tone(row["emotion"], row["is_chat"] == "1")
         chunks = split_plain_text(row["text"], MAX_FRAGMENT_LEN)
         for idx, chunk in enumerate(chunks):
             chunk_prefix = prefix if idx == 0 else ""
             out.append(
-                f'<voice name="{escape_xml_text(row["speaker"])}" language="{escape_xml_text(row["language"])}" emotion="{escape_xml_text(row["emotion"])}">{chunk_prefix}{escape_xml_text(chunk)}</voice>'
+                f'<voice name="{escape_xml_text(row["speaker"])}" language="{escape_xml_text(row["language"])}" emotion="{escape_xml_text(row["emotion"])}" pace="{pace}" tone="{tone}">{chunk_prefix}{escape_xml_text(chunk)}</voice>'
             )
+            if idx < len(chunks) - 1:
+                out.append(f'<break time="{INTER_CHUNK_BREAK}"/>')
+        if row_idx < len(parsed) - 1:
+            out.append(f'<break time="{INTER_LINE_BREAK}"/>')
+    
     return out
 
 
