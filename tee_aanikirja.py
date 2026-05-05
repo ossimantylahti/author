@@ -176,11 +176,28 @@ def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
     lines = [f"file '{f.resolve()}'" for f in part_files]
     list_file.write_text("\n".join(lines) + "\n", encoding='utf-8')
 
-    cmd = [
+    copy_cmd = [
         'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
         '-i', str(list_file), '-c', 'copy', str(merged_path)
     ]
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(copy_cmd, check=True, capture_output=True, text=True)
+        return
+    except subprocess.CalledProcessError as e:
+        print(
+            'Varoitus: ffmpeg copy-merge epäonnistui, yritetään uudelleenenkoodausta MP3:ksi...',
+            file=sys.stderr,
+        )
+
+    reencode_cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
+        '-i', str(list_file), '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', str(merged_path)
+    ]
+    try:
+        subprocess.run(reencode_cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        details = (e.stderr or e.stdout or '').strip()
+        raise RuntimeError(f'Osien yhdistäminen epäonnistui ffmpeg:llä: {details}') from e
 
 
 def is_pause_only_ssml(text: str) -> bool:
@@ -223,6 +240,14 @@ def split_ssml_chunks(text: str, chunk_limit: int) -> list[tuple[str, str]]:
     return chunks
 
 
+
+
+def ensure_ffmpeg_installed() -> None:
+    if shutil.which("ffmpeg"):
+        return
+    raise RuntimeError(
+        "ffmpeg puuttuu. Asenna ffmpeg (esim. Ubuntu/Debian: sudo apt install ffmpeg, macOS: brew install ffmpeg)."
+    )
 
 
 def ensure_renderer_installed(renderer: str) -> None:
@@ -411,6 +436,7 @@ def main() -> int:
     pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
     try:
         ensure_renderer_installed(args.renderer)
+        ensure_ffmpeg_installed()
     except RuntimeError as e:
         print(f"Virhe: {e}", file=sys.stderr)
         return 2
