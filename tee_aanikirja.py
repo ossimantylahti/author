@@ -236,6 +236,49 @@ def ensure_renderer_installed(renderer: str) -> None:
     raise RuntimeError("Kokoro puuttuu. Asenna esim: pip install kokoro-onnx")
 
 
+
+
+def piper_download_candidates(voice_id: str) -> list[str]:
+    candidates = [voice_id]
+    if voice_id.endswith("-medium"):
+        candidates.append(voice_id[:-7] + "-low")
+    return candidates
+
+
+def ensure_piper_voice_available(voice_id: str) -> str:
+    for candidate in piper_download_candidates(voice_id):
+        cmd = [sys.executable, "-m", "piper.download_voices", candidate]
+        proc = subprocess.run(cmd, text=True, capture_output=True)
+        if proc.returncode == 0:
+            if candidate != voice_id:
+                print(f"Piper-ääni '{voice_id}' ei ollut saatavilla, käytetään ladattua ääntä '{candidate}'.")
+            return candidate
+    raise RuntimeError(
+        f"Piper-äänen automaattinen lataus epäonnistui äänelle '{voice_id}'. "
+        "Tarkista saatavilla olevat Piper-äänet ja anna toimiva --voice-id."
+    )
+
+
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path) -> str:
+    if renderer == "piper":
+        cmd = ["piper", "--model", voice_id, "--output_file", str(out_path)]
+        proc = subprocess.run(cmd, input=strip_ssml_tags(text), text=True, capture_output=True)
+        if proc.returncode == 0:
+            return voice_id
+        combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        if "Unable to find voice" in combined:
+            resolved_voice = ensure_piper_voice_available(voice_id)
+            retry = subprocess.run(["piper", "--model", resolved_voice, "--output_file", str(out_path)], input=strip_ssml_tags(text), text=True, capture_output=True)
+            if retry.returncode == 0:
+                return resolved_voice
+            raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{resolved_voice}': {retry.stderr.strip() or retry.stdout.strip()}")
+        raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
+
+    proc = subprocess.run(["kokoro-tts", "--voice", voice_id, "--output", str(out_path), strip_ssml_tags(text)], text=True, capture_output=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Kokoro-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
+    return voice_id
+
 def choose_voice_id(speaker: str, narrators: dict[str, Any], renderer: str, default_voice_id: str) -> str:
     voices = narrators.get("voices", {})
     speaker_data = voices.get(speaker, {}) if isinstance(voices, dict) else {}
@@ -429,14 +472,15 @@ def main() -> int:
                 try:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
-                    elif args.renderer == "piper":
-                        subprocess.run(["piper", "--model", chunk_voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(before), text=True, check=True)
                     else:
-                        subprocess.run(["kokoro-tts", "--voice", chunk_voice_id, "--output", str(out_path), strip_ssml_tags(before)], check=True)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
                     break
+                except RuntimeError as e:
+                    print(f"Virhe: {e}", file=sys.stderr)
+                    return 2
                 part_no += 1
 
             notif_src = script_dir / "notification.mp3"
@@ -467,25 +511,27 @@ def main() -> int:
         chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
         out_path = out_dir / f"{chapter_prefix}_{i:04d}.mp3"
         print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
-        print("--- 11labs request debug ---")
-        print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
-        print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
-        if pronunciation_locators:
-            print(f"pronunciation_dictionary_locators={pronunciation_locators}")
-        print("text:")
-        print(chunk)
-        print("--- /11labs request debug ---")
+        if args.renderer == "elevenlabs":
+            print("--- 11labs request debug ---")
+            print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
+            print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
+            if pronunciation_locators:
+                print(f"pronunciation_dictionary_locators={pronunciation_locators}")
+            print("text:")
+            print(chunk)
+            print("--- /11labs request debug ---")
         try:
             if args.renderer == "elevenlabs":
                 synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
-            elif args.renderer == "piper":
-                subprocess.run(["piper", "--model", chunk_voice_id, "--output_file", str(out_path)], input=strip_ssml_tags(chunk), text=True, check=True)
             else:
-                subprocess.run(["kokoro-tts", "--voice", chunk_voice_id, "--output", str(out_path), strip_ssml_tags(chunk)], check=True)
+                chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, chunk, out_path)
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
             quota_exhausted = True
             break
+        except RuntimeError as e:
+            print(f"Virhe: {e}", file=sys.stderr)
+            return 2
         part_no += 1
 
         if quota_exhausted:
