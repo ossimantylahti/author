@@ -1,17 +1,8 @@
 {
-  "description": "ElevenLabs pronunciation dictionaries to apply for this project.",
-  "notes": [
-    "Luo ElevenLabsiin sanastot, joissa esim. Reacti0n -> Reaction ja suomenkielinen ääntämys sanoille Ylilauta/Pasila.",
-    "Korvaa alla olevat tunnisteet oikeilla arvoilla ElevenLabsin dictionary-UI:sta tai API:sta."
-  ],
   "pronunciation_dictionary_locators": [
     {
-      "pronunciation_dictionary_id": "REPLACE_WITH_DICT_ID_FOR_BRAND_NAMES",
-      "version_id": "REPLACE_WITH_VERSION_ID"
-    },
-    {
-      "pronunciation_dictionary_id": "REPLACE_WITH_DICT_ID_FOR_FINNISH_WORDS",
-      "version_id": "REPLACE_WITH_VERSION_ID"
+      "pronunciation_dictionary_id": "Md39yome4C6gAil0z6Lc",
+      "version_id": "pHnPzuy725UyvsEuOMYW"
     }
   ]
 }
