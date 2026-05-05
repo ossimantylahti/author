@@ -34,3 +34,39 @@ Lisää rivi ~/.bashrc-tiedoston loppuun:
 
 echo 'export OPENAI_API_KEY="sk-...OMA_OPENAI_AVAIN..."' >> ~/.bashrc
 source ~/.bashrc
+
+## Äänikirjan generointi lokaalilla syntetisaattorilla (WSL)
+
+Esimerkki Piperillä (tulokset samaan hakemistoon lähdetiedoston alle):
+
+```bash
+python3 tee_aanikirja.py \
+  --renderer piper \
+  --input-file /mnt/c/users/ossim/downloads/abook/prologue_audiobook_11labs_v2_ssml.xml \
+  --out-dir /mnt/c/users/ossim/downloads/abook \
+  --narrators-file /mnt/c/users/ossim/Github/om-author/prompt_narrators.txt \
+  --voice-name Kertoja \
+  --merged-file prologue_piper_merged.mp3
+```
+
+Kokorolla vastaava:
+
+```bash
+python3 tee_aanikirja.py \
+  --renderer kokoro \
+  --input-file /mnt/c/users/ossim/downloads/abook/prologue_audiobook_11labs_v2_ssml.xml \
+  --out-dir /mnt/c/users/ossim/downloads/abook \
+  --narrators-file /mnt/c/users/ossim/Github/om-author/prompt_narrators.txt \
+  --voice-name Kertoja \
+  --merged-file prologue_kokoro_merged.mp3
+```
+
+Huom: `--pronunciation-file` / PLS-lexicon välittyy vain ElevenLabs-rendererille. Piper/Kokoro-polussa sitä ei käytetä, joten sitä ei tarvitse liittää parametreihin.
+
+Jos Piper antaa virheen `Unable to find voice`, lataa ääni ensin (esim. Heidi):
+
+```bash
+python -m piper.download_voices fi_FI-heidi-medium
+```
+
+(Tai valitse jokin muu asennettu Piper-ääni ja anna se `--voice-id`-parametrilla.)
