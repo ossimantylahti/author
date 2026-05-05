@@ -18,6 +18,12 @@ API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
 DEFAULT_PRONUNCIATION_FILE = "prompt_pronounciation.txt"
+DEFAULT_PRONUNCIATION_LOCATORS = [
+    {
+        "pronunciation_dictionary_id": "Md39yome4C6gAil0z6Lc",
+        "version_id": "pHnPzuy725UyvsEuOMYW",
+    }
+]
 MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = 9500
 NARRATOR_NAME = "Kertoja"
@@ -33,7 +39,7 @@ def load_narrators(path: Path) -> dict[str, str]:
 
 def load_pronunciation_locators(path: Path) -> list[dict[str, str]]:
     if not path.exists():
-        return []
+        return DEFAULT_PRONUNCIATION_LOCATORS.copy()
 
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, dict):
