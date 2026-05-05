@@ -413,7 +413,7 @@ def pop_leading_break_seconds(text: str) -> tuple[str, float | None]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
     parser.add_argument("--input-file", required=True)
-    parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto osa-mp3 tiedostoille")
+    parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto, johon luodaan parts/ ja mahdollinen yhdistetty mp3")
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
     parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
     parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro"], default="piper")
@@ -477,6 +477,8 @@ def main() -> int:
             print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
 
     out_dir = Path(args.out_dir)
+    parts_dir = out_dir / "parts"
+    parts_dir.mkdir(parents=True, exist_ok=True)
     script_path = Path(args.input_file).resolve()
     script_dir = script_path.parent
     chapter_prefix = script_path.stem
@@ -493,7 +495,7 @@ def main() -> int:
             if before and not is_pause_only_ssml(before):
                 i = part_no
                 chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
-                out_path = out_dir / f"{chapter_prefix}_{i:04d}.mp3"
+                out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
                 print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker}")
                 try:
                     if args.renderer == "elevenlabs":
@@ -511,7 +513,7 @@ def main() -> int:
 
             notif_src = script_dir / "notification.mp3"
             if notif_src.exists():
-                out_path = out_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
+                out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(notif_src, out_path)
                 print(f"[{part_no}] -> {out_path} (notification.mp3)")
@@ -524,7 +526,7 @@ def main() -> int:
             pending, pause_s = pop_leading_break_seconds(pending)
             if pause_s is None:
                 pause_s = 0.2
-            out_path = out_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
+            out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
             render_silence(out_path, pause_s)
             print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
             part_no += 1
@@ -535,7 +537,7 @@ def main() -> int:
 
         i = part_no
         chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
-        out_path = out_dir / f"{chapter_prefix}_{i:04d}.mp3"
+        out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
         print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
         if args.renderer == "elevenlabs":
             print("--- 11labs request debug ---")
@@ -564,11 +566,11 @@ def main() -> int:
             break
 
     if not args.no_merge:
-        part_files = sorted(out_dir.glob("*.mp3"))
+        part_files = sorted(parts_dir.glob("*.mp3"))
         if part_files:
-            merged_path = Path(args.merged_file) if args.merged_file else Path(f"{chapter_prefix}_fullchapter.mp3")
+            merged_path = Path(args.merged_file) if args.merged_file else out_dir / f"{chapter_prefix}_fullchapter.mp3"
             print(f"Yhdistetään osat tiedostoon: {merged_path}")
-            merge_mp3_parts(out_dir, merged_path)
+            merge_mp3_parts(parts_dir, merged_path)
         else:
             print("Ei yhdistettäviä osia.", file=sys.stderr)
 
