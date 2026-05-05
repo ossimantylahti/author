@@ -410,6 +410,25 @@ def pop_leading_break_seconds(text: str) -> tuple[str, float | None]:
     return remaining, float(m.group(1))
 
 
+def split_text_and_breaks(text: str) -> list[tuple[str, str | float]]:
+    parts: list[tuple[str, str | float]] = []
+    break_re = re.compile(r'<break\b([^>]*)/?>', flags=re.IGNORECASE)
+    pos = 0
+    for m in break_re.finditer(text):
+        before = text[pos:m.start()]
+        if before.strip():
+            parts.append(("text", before.strip()))
+        attrs = m.group(1) or ""
+        tm = re.search(r'time="([0-9.]+)s"', attrs, flags=re.IGNORECASE)
+        pause_s = float(tm.group(1)) if tm else 0.2
+        parts.append(("break", pause_s))
+        pos = m.end()
+    tail = text[pos:]
+    if tail.strip():
+        parts.append(("text", tail.strip()))
+    return parts
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
     parser.add_argument("--input-file", required=True)
@@ -535,11 +554,11 @@ def main() -> int:
         if not chunk or is_pause_only_ssml(chunk):
             continue
 
-        i = part_no
         chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
-        out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
-        print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
         if args.renderer == "elevenlabs":
+            i = part_no
+            out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
+            print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
             print("--- 11labs request debug ---")
             print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
             print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
@@ -551,8 +570,24 @@ def main() -> int:
         try:
             if args.renderer == "elevenlabs":
                 synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                part_no += 1
             else:
-                chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, chunk, out_path)
+                for frag_type, value in split_text_and_breaks(chunk):
+                    out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
+                    if frag_type == "break":
+                        pause_s = float(value)
+                        render_silence(out_path, pause_s)
+                        print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
+                    else:
+                        frag_text = str(value)
+                        if is_pause_only_ssml(frag_text):
+                            continue
+                        clean_text = strip_ssml_tags(frag_text)
+                        if not clean_text:
+                            continue
+                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker}")
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path)
+                    part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
             quota_exhausted = True
@@ -560,7 +595,6 @@ def main() -> int:
         except RuntimeError as e:
             print(f"Virhe: {e}", file=sys.stderr)
             return 2
-        part_no += 1
 
         if quota_exhausted:
             break
