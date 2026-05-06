@@ -175,6 +175,75 @@ def resolve_voice_name(candidate: str, narrators: dict[str, str], alias_map: dic
         return NARRATOR_NAME
     return alias_map.get(normalise_alias_key(raw), NARRATOR_NAME)
 
+
+def clean_dialogue_text(text: str) -> str:
+    cleaned = (text or "").strip()
+    # Remove common leading dialogue markers but keep dashes inside the utterance.
+    cleaned = re.sub(r'^\s*[–—-]\s*', "", cleaned)
+    cleaned = re.sub(r'^\s*[“"]\s*', "", cleaned)
+    return cleaned.strip()
+
+
+def normalise_segment_text_for_compare(text: str) -> str:
+    value = clean_dialogue_text(text).lower().strip()
+    value = re.sub(r'[“”"\'«»]', "", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    value = value[:-1].rstrip() if value.endswith(".") else value
+    return value
+
+
+def deduplicate_segments(segments: list[ScriptSegment]) -> list[ScriptSegment]:
+    if not segments:
+        return []
+    deduped: list[ScriptSegment] = [segments[0]]
+    for seg in segments[1:]:
+        prev = deduped[-1]
+        if seg.type != "dialogue" or prev.type != "dialogue" or seg.speaker != prev.speaker:
+            deduped.append(seg)
+            continue
+        prev_norm = normalise_segment_text_for_compare(prev.text)
+        curr_norm = normalise_segment_text_for_compare(seg.text)
+        if not prev_norm or not curr_norm:
+            deduped.append(seg)
+            continue
+        same = prev_norm == curr_norm
+        near_dup = prev_norm in curr_norm or curr_norm in prev_norm
+        if not (same or near_dup):
+            deduped.append(seg)
+            continue
+        prev_clean = clean_dialogue_text(prev.text)
+        curr_clean = clean_dialogue_text(seg.text)
+        if prev_norm in curr_norm and len(curr_clean) > len(prev_clean):
+            deduped[-1] = seg
+        elif curr_norm in prev_norm and len(prev_clean) >= len(curr_clean):
+            continue
+        elif curr_clean != prev_clean:
+            deduped[-1] = seg
+    return deduped
+
+
+def normalise_segments(
+    segments: list[ScriptSegment],
+    narrators: dict[str, str],
+    alias_map: dict[str, str],
+) -> list[ScriptSegment]:
+    normalised: list[ScriptSegment] = []
+    for segment in segments:
+        seg_type = "dialogue" if segment.type == "dialogue" else "narration"
+        if seg_type == "narration":
+            speaker = NARRATOR_NAME
+            text = segment.text.strip()
+        else:
+            raw_speaker = segment.speaker
+            speaker = resolve_voice_name(raw_speaker, narrators, alias_map)
+            if speaker == NARRATOR_NAME and raw_speaker.strip() and normalise_alias_key(raw_speaker) != normalise_alias_key(NARRATOR_NAME):
+                print(f'WARNING: Speaker "{raw_speaker}" was detected but no matching narrator was found. Falling back to {NARRATOR_NAME}.', file=sys.stderr)
+            text = clean_dialogue_text(segment.text)
+        if not text:
+            continue
+        normalised.append(ScriptSegment(segment_id=segment.segment_id, type=seg_type, speaker=speaker, text=text, confidence=segment.confidence))
+    return deduplicate_segments(normalised)
+
 # rest mostly unchanged, shortened for brevity in this patch context
 # (kept deterministic parser and chat handling)
 
@@ -303,9 +372,6 @@ def attribute_speakers_rule_based(text: str, narrators: dict[str, str], alias_ma
         if speaker != NARRATOR_NAME:
             state["last_explicit_speaker"] = speaker; state["last_dialogue_speaker"] = speaker; state["current_scene_subject"] = speaker
         segment = ScriptSegment(segment_id=idx, type=seg_type, speaker=speaker, text=spoken, confidence=1.0)
-        if debug:
-            conf = f" confidence={segment.confidence:.2f}" if segment.type == "dialogue" else ""
-            print(f"[{segment.type}] speaker={segment.speaker}{conf} text={segment.text!r}")
         parsed.append(segment)
     return parsed
 
@@ -328,19 +394,13 @@ def attribute_speakers_with_openai(text: str, narrators: dict[str, str], alias_m
     out: list[ScriptSegment] = []
     for row in data:
         raw_speaker = str(row.get("speaker", NARRATOR_NAME))
-        resolved = resolve_voice_name(raw_speaker, narrators, alias_map)
-        if resolved == NARRATOR_NAME and raw_speaker.strip() and normalise_alias_key(raw_speaker) != normalise_alias_key(NARRATOR_NAME):
-            print(f'WARNING: Speaker "{raw_speaker}" was detected but no matching narrator was found. Falling back to {NARRATOR_NAME}.', file=sys.stderr)
         seg = ScriptSegment(
             segment_id=int(row["segment_id"]),
             type="dialogue" if row.get("type") == "dialogue" else "narration",
-            speaker=resolved,
+            speaker=raw_speaker,
             text=str(row.get("text", "")),
             confidence=float(row.get("confidence", 1.0)),
         )
-        if debug:
-            conf = f" confidence={seg.confidence:.2f}" if seg.type == "dialogue" else ""
-            print(f"[{seg.type}] speaker={seg.speaker}{conf} text={seg.text!r}")
         out.append(seg)
     return out
 
@@ -426,6 +486,11 @@ def main() -> int:
             segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
     else:
         segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
+    segments = normalise_segments(segments, cfg.voices, cfg.aliases)
+    if args.debug_speakers:
+        for segment in segments:
+            conf = f" confidence={segment.confidence:.2f}" if segment.type == "dialogue" else ""
+            print(f"[{segment.type}] speaker={segment.speaker}{conf} text={segment.text!r}")
     ssml = "<speak>\n" + "\n".join(to_ssml_lines(segments, cfg.voices, cfg.aliases)) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
     out = resolve_output_path(args.output, args.content, Path(args.input), title)
