@@ -19,10 +19,12 @@ from openai import OpenAI
 
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
+DEFAULT_AUDIO_FORMAT = "mp3"
+MAX_RENDERER_CHUNK_LIMIT = 4000
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
 DEFAULT_PRONUNCIATION_FILE = "prompt_pronunciation.txt"
 MAX_TEXT_LEN = 10000
-DEFAULT_CHUNK_LIMIT = 9500
+DEFAULT_CHUNK_LIMIT = MAX_RENDERER_CHUNK_LIMIT
 NARRATOR_NAME = "Kertoja"
 MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
 
@@ -294,7 +296,7 @@ def ensure_piper_voice_available(voice_id: str) -> str:
     )
 
 
-def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path) -> str:
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str) -> str:
     if renderer == "openai":
         client = OpenAI()
         clean_text = strip_ssml_tags(text)
@@ -305,7 +307,7 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path) ->
             model="gpt-4o-mini-tts",
             voice=voice_id,
             input=clean_text,
-            format="mp3",
+            response_format=audio_format,
         ) as response:
             response.stream_to_file(out_path)
         return voice_id
@@ -390,13 +392,13 @@ def check_credit_balance(api_key: str) -> int | None:
     return limit - used
 
 
-def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool, pronunciation_locators: list[dict[str, str]]) -> None:
+def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model_id: str, stability: float, similarity_boost: float, style: float, use_speaker_boost: bool, pronunciation_locators: list[dict[str, str]], output_format: str) -> None:
     url = f"{API_BASE}/text-to-speech/{voice_id}/stream"
     headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
     payload = {
         "text": text,
         "model_id": model_id,
-        "output_format": OUTPUT_FORMAT,
+        "output_format": output_format,
         "enable_ssml_parsing": True,
         "voice_settings": {
             "stability": stability,
@@ -465,7 +467,8 @@ def main() -> int:
     parser.add_argument("--voice-id", default=None)
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
     parser.add_argument("--model-id", default=None)
-    parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT)
+    parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT, help="Maksimimerkkimäärä per chunk (kaikille renderöijille enintään 4000).")
+    parser.add_argument("--format", choices=["mp3"], default=DEFAULT_AUDIO_FORMAT, help="Ulostuloäänen formaatti käyttäjälle. Tällä hetkellä tuettu: mp3. Ohjelma mapittaa tämän renderer-kohtaiseen parametriin.")
     parser.add_argument("--stability", type=float, default=0.45)
     parser.add_argument("--similarity-boost", type=float, default=0.75)
     parser.add_argument("--style", type=float, default=0.15)
@@ -500,7 +503,8 @@ def main() -> int:
         return 2
 
     model_id = args.model_id or MODEL_MAP[args.model]
-    chunks = split_ssml_chunks(content, args.chunk_limit)
+    chunk_limit = min(args.chunk_limit, MAX_RENDERER_CHUNK_LIMIT)
+    chunks = split_ssml_chunks(content, chunk_limit)
     print(f"Voice: {args.voice_name} -> {voice_id}")
     if args.renderer == "elevenlabs":
         print(f"Model: {args.model} ({model_id})")
@@ -550,9 +554,9 @@ def main() -> int:
                 print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker}")
                 try:
                     if args.renderer == "elevenlabs":
-                        synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                        synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -601,7 +605,7 @@ def main() -> int:
             print("--- /11labs request debug ---")
         try:
             if args.renderer == "elevenlabs":
-                synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators)
+                synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                 part_no += 1
             else:
                 for frag_type, value in split_text_and_breaks(chunk):
@@ -618,7 +622,7 @@ def main() -> int:
                         if not clean_text:
                             continue
                         print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker}")
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path, args.format)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
