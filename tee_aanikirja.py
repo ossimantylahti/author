@@ -9,10 +9,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib import error, request
 import shutil
-import random
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -269,6 +269,7 @@ def extract_voice_attrs(text: str) -> dict[str, str]:
     attrs_text = m.group(1)
     supported = {
         "name",
+        "elevenlabs_voice",
         "openai_voice",
         "openai_model",
         "openai_instructions",
@@ -295,46 +296,68 @@ def looks_like_piper_voice(value: str) -> bool:
     return bool(re.fullmatch(r"[a-z]{2}_[A-Z]{2}-.+-(low|medium|high)", value.strip()))
 
 
-def resolve_renderer_voice_id(
-    renderer: str,
-    speaker: str,
-    text: str,
-    narrators: dict[str, Any],
-    default_voice_id: str,
-) -> str:
-    attrs = extract_voice_attrs(text)
-
+def looks_like_renderer_voice_id(renderer: str, value: str) -> bool:
+    candidate = value.strip()
     if renderer == "kokoro":
-        if attrs.get("kokoro_voice"):
-            return attrs["kokoro_voice"]
-        if attrs.get("name"):
-            voice_name = attrs["name"]
-            if looks_like_kokoro_voice(voice_name):
-                return voice_name
-            mapped = choose_voice_id(voice_name, narrators, renderer, "")
-            if mapped:
-                return mapped
-            fallback = choose_voice_id(speaker, narrators, renderer, default_voice_id)
-            print(f"Warning: voice name '{voice_name}' is not a Kokoro voice id; using fallback '{fallback}'.")
-            return fallback
-        return choose_voice_id(speaker, narrators, renderer, default_voice_id)
-
+        return looks_like_kokoro_voice(candidate)
     if renderer == "piper":
-        if attrs.get("piper_voice"):
-            return attrs["piper_voice"]
-        if attrs.get("name"):
-            voice_name = attrs["name"]
-            if looks_like_piper_voice(voice_name):
-                return voice_name
-            mapped = choose_voice_id(voice_name, narrators, renderer, "")
-            if mapped:
-                return mapped
-            fallback = choose_voice_id(speaker, narrators, renderer, default_voice_id)
-            print(f"Warning: voice name '{voice_name}' is not a Piper voice id; using fallback '{fallback}'.")
-            return fallback
-        return choose_voice_id(speaker, narrators, renderer, default_voice_id)
+        return looks_like_piper_voice(candidate)
+    if renderer == "openai":
+        return candidate in {"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"}
+    return False
 
-    return choose_voice_id(speaker, narrators, renderer, default_voice_id)
+
+def narrator_voice_id(narrators: dict[str, Any], narrator_name: str, renderer: str) -> str | None:
+    voices = narrators.get("voices", {})
+    speaker_data = voices.get(narrator_name, {}) if isinstance(voices, dict) else {}
+    if not isinstance(speaker_data, dict):
+        return None
+    ids = speaker_data.get("ids", {})
+    if isinstance(ids, dict) and ids.get(renderer):
+        return str(ids[renderer])
+    return None
+
+
+def fallback_narrator_voice_id(narrators: dict[str, Any], renderer: str) -> str | None:
+    return narrator_voice_id(narrators, NARRATOR_NAME, renderer)
+
+
+def resolve_voice_id_for_fragment(renderer: str, fragment_text: str, speaker: str, narrators: dict[str, Any], cli_voice_name: str | None, cli_voice_id: str | None) -> tuple[str, str]:
+    attrs = extract_voice_attrs(fragment_text)
+    renderer_attr = attrs.get(f"{renderer}_voice")
+    if renderer_attr:
+        return renderer_attr, "ssml_renderer_attribute"
+
+    voice_name = attrs.get("name", "").strip()
+    if voice_name and looks_like_renderer_voice_id(renderer, voice_name):
+        return voice_name, "ssml_direct_voice_id"
+
+    if voice_name:
+        mapped = narrator_voice_id(narrators, voice_name, renderer)
+        if mapped:
+            return mapped, "narrator_mapping"
+
+    speaker_mapped = narrator_voice_id(narrators, speaker, renderer)
+    if speaker_mapped:
+        return speaker_mapped, "narrator_mapping"
+
+    fallback_voice = fallback_narrator_voice_id(narrators, renderer)
+    if fallback_voice:
+        return fallback_voice, "narrator_fallback_kertoja"
+
+    if cli_voice_id:
+        print("Warning: using deprecated CLI voice fallback. Prefer SSML voice attributes or prompt_narrators.txt.")
+        return cli_voice_id, "deprecated_cli_voice_id"
+
+    if cli_voice_name:
+        cli_mapped = narrator_voice_id(narrators, cli_voice_name, renderer)
+        if cli_mapped:
+            print("Warning: using deprecated CLI voice fallback. Prefer SSML voice attributes or prompt_narrators.txt.")
+            return cli_mapped, "deprecated_cli_voice_name"
+
+    raise RuntimeError(
+        f"No voice id found for renderer '{renderer}'. Add voices.Kertoja.ids.{renderer} to prompt_narrators.txt or specify a renderer-specific SSML voice attribute."
+    )
 
 
 def extract_ssml_languages(text: str) -> set[str]:
@@ -494,7 +517,14 @@ def ensure_piper_voice_available(voice_id: str) -> str:
     )
 
 
-def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None) -> str:
+def map_kokoro_language(text: str) -> str | None:
+    language_map = {"finnish": "fi", "english": "en-us", "spanish": "es-mx"}
+    attrs = extract_voice_attrs(text)
+    language = attrs.get("language", "").strip().lower()
+    return language_map.get(language)
+
+
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None) -> str:
     if renderer == "openai":
         client = OpenAI()
         ssml_voice, ssml_model, ssml_instructions = extract_openai_ssml_options(text)
@@ -533,29 +563,55 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
         raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
 
     text = apply_pronunciation_aliases(text, pronunciation_map or [])
-    proc = subprocess.run(["kokoro-tts", "--voice", voice_id, "--output", str(out_path), strip_ssml_tags(text)], text=True, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Kokoro-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
-    return voice_id
+    clean_text = strip_ssml_tags(text)
+    if not clean_text:
+        return voice_id
 
-def choose_voice_id(speaker: str, narrators: dict[str, Any], renderer: str, default_voice_id: str) -> str:
-    voices = narrators.get("voices", {})
-    speaker_data = voices.get(speaker, {}) if isinstance(voices, dict) else {}
-    if isinstance(speaker_data, dict):
-        ids = speaker_data.get("ids", {})
-        if isinstance(ids, dict) and ids.get(renderer):
-            return str(ids[renderer])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = f".{audio_format}"
+    temp_input_path: Path | None = None
+    temp_output_path: Path | None = None
 
-    if speaker.lower().startswith("chat") and isinstance(voices, dict):
-        chat_voices = []
-        for name, meta in voices.items():
-            if str(name).lower().startswith("chat") and isinstance(meta, dict):
-                ids = meta.get("ids", {})
-                if isinstance(ids, dict) and ids.get(renderer):
-                    chat_voices.append(str(ids[renderer]))
-        if chat_voices:
-            return random.choice(chat_voices)
-    return default_voice_id
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as temp_input:
+            temp_input.write(clean_text)
+            temp_input_path = Path(temp_input.name)
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_output:
+            temp_output_path = Path(temp_output.name)
+
+        cmd = [
+            "kokoro-tts",
+            str(temp_input_path),
+            str(temp_output_path),
+            "--voice",
+            voice_id,
+            "--format",
+            audio_format,
+        ]
+        mapped_lang = map_kokoro_language(text)
+        if mapped_lang:
+            cmd.extend(["--lang", mapped_lang])
+        if kokoro_model:
+            cmd.extend(["--model", kokoro_model])
+        if kokoro_voices:
+            cmd.extend(["--voices", kokoro_voices])
+
+        print(f"Kokoro CLI command: {' '.join(cmd)}")
+        proc = subprocess.run(cmd, text=True, capture_output=True)
+        if proc.returncode != 0:
+            details = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
+            raise RuntimeError(f"Kokoro-ajo epäonnistui äänellä '{voice_id}':\n{details}")
+
+        shutil.copyfile(temp_output_path, out_path)
+        return voice_id
+    finally:
+        for temp_path in (temp_input_path, temp_output_path):
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
 
 class QuotaExceededError(RuntimeError):
     """Raised when ElevenLabs quota is exhausted for current request."""
@@ -676,9 +732,11 @@ def main() -> int:
     parser.add_argument("--generate-pls", action="store_true")
     parser.add_argument("--pls-out-dir", default="pronunciation_exports")
     parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper")
-    parser.add_argument("--voice-name", default="Kertoja")
-    parser.add_argument("--voice-id", default=None)
+    parser.add_argument("--voice-name", default=None, help="Deprecated fallback narrator name. Prefer SSML voice attributes and prompt_narrators.txt.")
+    parser.add_argument("--voice-id", default=None, help="Deprecated fallback renderer voice id. Prefer SSML voice attributes and prompt_narrators.txt.")
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
+    parser.add_argument("--kokoro-model", default=None, help="Optional Kokoro model path/name for kokoro-tts.")
+    parser.add_argument("--kokoro-voices", default=None, help="Optional Kokoro voices path for kokoro-tts.")
     parser.add_argument("--model-id", default=None)
     parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT, help="Maksimimerkkimäärä per chunk (kaikille renderöijille enintään 4000).")
     parser.add_argument("--format", choices=["mp3"], default=DEFAULT_AUDIO_FORMAT, help="Ulostuloäänen formaatti käyttäjälle. Tällä hetkellä tuettu: mp3. Ohjelma mapittaa tämän renderer-kohtaiseen parametriin.")
@@ -692,7 +750,11 @@ def main() -> int:
     args = parser.parse_args()
 
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
-    narrators = load_narrators(Path(args.narrators_file))
+    narrators_path = Path(args.narrators_file)
+    if not narrators_path.exists():
+        print(f"Error: narrators file is required for fallback narrator resolution: {args.narrators_file}", file=sys.stderr)
+        return 2
+    narrators = load_narrators(narrators_path)
     ssml_languages = extract_ssml_languages(content)
     pronunciation_language, pronunciation_lang_note = resolve_pronunciation_language(args.language, ssml_languages)
     pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
@@ -712,21 +774,12 @@ def main() -> int:
         print(f"Virhe: {e}", file=sys.stderr)
         return 2
 
-    defaults = narrators.get("defaults", {})
-    voices = narrators.get("voices", {})
-    voice_meta = voices.get(args.voice_name, {}) if isinstance(voices, dict) else {}
-    gender = "female"
-    if isinstance(voice_meta, dict):
-        gender = str(voice_meta.get("gender", "female")).lower()
-    gender_defaults = defaults.get(gender, {}) if isinstance(defaults, dict) else {}
-    fallback_voice_id = str(gender_defaults.get(args.renderer, "")).strip()
-
-    voice_id = args.voice_id or choose_voice_id(args.voice_name, narrators, args.renderer, fallback_voice_id)
-    if args.renderer == "openai" and not args.voice_id and ssml_languages == {"finnish"}:
-        voice_id = "ash"
-        print("OpenAI default voice override: finnish SSML detected, using Ash.")
-    if not voice_id:
-        print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
+    fallback_voice_id = fallback_narrator_voice_id(narrators, args.renderer)
+    if not fallback_voice_id and not args.voice_id:
+        print(
+            f"No voice id found for renderer '{args.renderer}'. Add voices.Kertoja.ids.{args.renderer} to prompt_narrators.txt or specify a renderer-specific SSML voice attribute.",
+            file=sys.stderr,
+        )
         return 2
 
     model_id = args.model_id or MODEL_MAP[args.model]
@@ -740,7 +793,12 @@ def main() -> int:
         heading_chunk = f'<speak>\n<voice name="{NARRATOR_NAME}" language="finnish" openai_instructions="Lue suomeksi selkeästi ja luonnollisesti.">{escape(heading_spoken)}</voice>\n</speak>'
         chunks.insert(0, (NARRATOR_NAME, heading_chunk))
         print(f"Luvun otsikko lisätty: {heading}")
-    print(f"Voice: {args.voice_name} -> {voice_id}")
+    print(f"Renderer: {args.renderer}")
+    print(f"Fallback narrator: {NARRATOR_NAME} -> {fallback_voice_id or 'none'}")
+    if args.voice_name or args.voice_id:
+        print(f"CLI voice fallback: voice-name={args.voice_name or 'none'} voice-id={args.voice_id or 'none'} (deprecated)")
+    else:
+        print("CLI voice fallback: none")
     if args.renderer == "elevenlabs":
         print(f"Model: {args.model} ({model_id})")
     elif args.renderer == "openai":
@@ -809,14 +867,14 @@ def main() -> int:
             before = pending[:notif_m.start()].strip()
             if before and not is_pause_only_ssml(before):
                 i = part_no
-                chunk_voice_id = resolve_renderer_voice_id(args.renderer, speaker, before, narrators, voice_id)
+                chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, before, speaker, narrators, args.voice_name, args.voice_id)
                 out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
-                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id}")
+                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source}")
                 try:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -850,11 +908,11 @@ def main() -> int:
         if not chunk or is_pause_only_ssml(chunk):
             continue
 
-        chunk_voice_id = resolve_renderer_voice_id(args.renderer, speaker, chunk, narrators, voice_id)
+        chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, chunk, speaker, narrators, args.voice_name, args.voice_id)
         if args.renderer == "elevenlabs":
             i = part_no
             out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
-            print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker}")
+            print(f"[{i}] -> {out_path} ({len(chunk)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source}")
             print("--- 11labs request debug ---")
             print(f"voice_id={chunk_voice_id} model_id={model_id} output_format={OUTPUT_FORMAT} enable_ssml_parsing=True")
             print(f"voice_settings={{stability: {args.stability}, similarity_boost: {args.similarity_boost}, style: {args.style}, use_speaker_boost: {not args.no_speaker_boost}}}")
@@ -878,12 +936,12 @@ def main() -> int:
                         frag_text = str(value)
                         if is_pause_only_ssml(frag_text):
                             continue
-                        resolved_voice_id = resolve_renderer_voice_id(args.renderer, speaker, frag_text, narrators, chunk_voice_id)
+                        resolved_voice_id, resolved_voice_source = resolve_voice_id_for_fragment(args.renderer, frag_text, speaker, narrators, args.voice_name, args.voice_id)
                         clean_text = strip_ssml_tags(frag_text)
                         if not clean_text:
                             continue
-                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id}")
-                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, clean_text, out_path, args.format, pronunciation_map)
+                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source}")
+                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, clean_text, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
