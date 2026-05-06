@@ -403,7 +403,7 @@ def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai
 
 def resolve_output_path(output_arg: str | None, act_no: int, chapter_no: int, chapter_title: str) -> Path:
     safe_title = re.sub(r"[^A-Za-z0-9ÅÄÖåäö_-]+", "_", chapter_title).strip("_") or "luku"
-    filename = f"{act_no:02d}_{chapter_no:02d}_{safe_title}.ssml"
+    filename = f"{act_no:02d}_{chapter_no:02d}_{safe_title}_ssml.xml"
     if not output_arg:
         return Path(filename)
 
