@@ -18,14 +18,14 @@
         "elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp",
         "piper": "en_GB-alan-medium",
         "kokoro": "fi_aino",
-        "openai": "onyx"
+        "openai": "echo"
       },
       "openai_profiles": {
         "fi": {
-          "profile_id": "kertoja-onyx-fi",
-          "voice": "onyx",
+          "profile_id": "kertoja-echo-fi",
+          "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Lue suomeksi rauhallisena kirjallisena pohjoismaisena rikosromaanin kertojana. Käytä luonnollista suomen rytmiä ja selkeitä lausepainoja. Älä ylinäyttele. Sävy on hillitty, kuiva ja hieman synkkä. Älä kuulosta uutistenlukijalta tai tekoälyavustajalta."
+          "instructions": "Lue suomeksi rauhallisena ja kuivakkaana rikosromaanin kertojana. Pidä ääni matalana, selkeänä ja maltillisena. Älä ylinäyttele. Sävy saa olla hieman arkinen ja lakoninen."
         },
         "fi_fable": {
           "profile_id": "kertoja-fable-fi",
@@ -66,7 +66,7 @@
           "profile_id": "miksu-echo-fi",
           "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi tuttavallisesti ja rennosti. Sävy on kevyt, nokkela ja selkeä."
+          "instructions": "Puhu suomeksi rennosti ja selkeästi. Säilytä äänikirjamainen perusääni, mutta anna repliikkiin nokkelaa keveyttä."
         },
         "en": {
           "profile_id": "miksu-echo-en",
@@ -95,7 +95,7 @@
           "profile_id": "elias-echo-fi",
           "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi harkiten ja analyyttisesti. Sävy on matala, rauhallinen ja tarkka."
+          "instructions": "Puhu suomeksi harkiten ja analyyttisesti. Säilytä äänikirjamainen perusääni, mutta lisää tarkka ja tutkiva sävy."
         },
         "en": {
           "profile_id": "elias-echo-en",
@@ -117,14 +117,14 @@
         "elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp",
         "piper": "en_GB-vctk-medium",
         "kokoro": "fi_aino",
-        "openai": "fable"
+        "openai": "echo"
       },
       "openai_profiles": {
         "fi": {
-          "profile_id": "virtasen-vaimo-fable-fi",
-          "voice": "fable",
+          "profile_id": "virtasen-vaimo-echo-fi",
+          "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi lämpimästi mutta väsyneesti. Sävy on arkinen, empaattinen ja hieman huolestunut."
+          "instructions": "Puhu suomeksi selkeästi ja äänikirjamaisesti. Sävy on lämmin, arkinen ja hienovaraisen huolestunut ilman ylinäyttelyä."
         },
         "en": {
           "profile_id": "virtanen-wife-fable-en",
@@ -146,14 +146,14 @@
         "elevenlabs": "eWNJGO7R0mtZgW8BqJYN",
         "piper": "fi_FI-harri-medium",
         "kokoro": "fi_matti",
-        "openai": "onyx"
+        "openai": "echo"
       },
       "openai_profiles": {
         "fi": {
-          "profile_id": "krp-keskus-onyx-fi",
-          "voice": "onyx",
+          "profile_id": "krp-keskus-echo-fi",
+          "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi viranomaismaisesti ja neutraalisti. Rytmi on tasainen ja informatiivinen."
+          "instructions": "Puhu suomeksi viranomaismaisesti ja täsmällisesti. Säilytä rauhallinen äänikirjamainen perusääni ja selkeä komento-otteinen rytmi."
         },
         "en": {
           "profile_id": "nbi-dispatch-onyx-en",
@@ -175,14 +175,14 @@
         "elevenlabs": "CKfuQaJKfvUG2Wtrda3Y",
         "piper": "en_GB-vctk-medium",
         "kokoro": "fi_aino",
-        "openai": "fable"
+        "openai": "echo"
       },
       "openai_profiles": {
         "fi": {
-          "profile_id": "cherrykitten-fable-fi",
-          "voice": "fable",
+          "profile_id": "cherrykitten-echo-fi",
+          "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi leikkisästi ja energisesti, mutta pidä artikulaatio selkeänä. Sävyssä on streamaajan karismaa."
+          "instructions": "Puhu suomeksi selkeästi ja äänikirjamaisesti, mutta anna sävyyn leikkisää streamaajan karismaa, nokkeluutta ja pientä provokaatiota. Älä ylinäyttele."
         },
         "en": {
           "profile_id": "cherrykitten-fable-en",
@@ -203,7 +203,16 @@
       "ids": {
         "elevenlabs": "bAq8AI9QURijOtmeFFqT",
         "piper": "en_GB-vctk-medium",
-        "kokoro": "fi_aino"
+        "kokoro": "fi_aino",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat1": {
@@ -211,7 +220,16 @@
       "ids": {
         "elevenlabs": "weA4Q36twV5kwSaTEL0Q",
         "piper": "en_GB-vctk-medium",
-        "kokoro": "fi_aino"
+        "kokoro": "fi_aino",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat2": {
@@ -219,7 +237,16 @@
       "ids": {
         "elevenlabs": "xNtG3W2oqJs0cJZuTyBc",
         "piper": "fi_FI-harri-medium",
-        "kokoro": "fi_matti"
+        "kokoro": "fi_matti",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat3": {
@@ -227,7 +254,16 @@
       "ids": {
         "elevenlabs": "eWNJGO7R0mtZgW8BqJYN",
         "piper": "fi_FI-harri-medium",
-        "kokoro": "fi_matti"
+        "kokoro": "fi_matti",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat4": {
@@ -235,7 +271,16 @@
       "ids": {
         "elevenlabs": "3dmeMOtCk4YVlhVD8Q5I",
         "piper": "en_GB-vctk-medium",
-        "kokoro": "fi_aino"
+        "kokoro": "fi_aino",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat5": {
@@ -243,7 +288,16 @@
       "ids": {
         "elevenlabs": "dOdGri2hgsKdUEaU09Ct",
         "piper": "fi_FI-harri-medium",
-        "kokoro": "fi_matti"
+        "kokoro": "fi_matti",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat-kaira": {
@@ -251,7 +305,16 @@
       "ids": {
         "elevenlabs": "Ky9j3wxFbp3dSAdrkOEv",
         "piper": "en_GB-vctk-medium",
-        "kokoro": "fi_aino"
+        "kokoro": "fi_aino",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "chat-mod": {
@@ -259,7 +322,16 @@
       "ids": {
         "elevenlabs": "BjCmiOq9A2piF1gMic0L",
         "piper": "fi_FI-harri-medium",
-        "kokoro": "fi_matti"
+        "kokoro": "fi_matti",
+        "openai": "alloy"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "chat-alloy-fi",
+          "voice": "alloy",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomenkielinen Twitch-chatin kommentti nopeasti, elävästi ja reaktiivisesti. Älä kuulosta kertojalta. Sävy määräytyy kommentin sisällöstä: innostunut, ivallinen, järkyttynyt, huvittunut, aggressiivinen tai epäuskoinen. Pidä rytmi napakkana ja chattimaisena. Älä tee siitä liian neutraalia."
+        }
       }
     },
     "Virtanen": {
@@ -275,7 +347,7 @@
           "profile_id": "virtanen-echo-fi",
           "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi rikospoliisina: rauhallinen, täsmällinen ja vähäeleinen. Pidä auktoriteetti ilman kovaa painostusta."
+          "instructions": "Puhu suomeksi rauhallisella, vähäeleisellä ja viranomaismaisella sävyllä. Säilytä sama luonnollinen äänikirjamainen perusääni, mutta anna repliikkiin rikospoliisin täsmällinen auktoriteetti."
         },
         "en": {
           "profile_id": "virtanen-echo-en",
@@ -305,14 +377,14 @@
         "elevenlabs": "0m71kiyu84bdUcKDzG0L",
         "piper": "fi_FI-harri-medium",
         "kokoro": "fi_matti",
-        "openai": "ash"
+        "openai": "echo"
       },
       "openai_profiles": {
         "fi": {
-          "profile_id": "eetu-ash-fi",
-          "voice": "ash",
+          "profile_id": "eetu-echo-fi",
+          "voice": "echo",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Puhu suomeksi nuorekkaasti ja suoraviivaisesti. Sävy on nopea, terävä ja hieman kärsimätön."
+          "instructions": "Puhu suomeksi nuorekkaasti ja suoraviivaisesti. Säilytä äänikirjamainen perusääni, mutta tee delivery teräväksi ja napakaksi."
         },
         "en": {
           "profile_id": "eetu-ash-en",

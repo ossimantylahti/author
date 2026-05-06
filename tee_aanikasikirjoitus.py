@@ -512,6 +512,101 @@ def infer_pace_and_tone(emotion: str, is_chat: bool) -> tuple[str, str]:
     if is_chat and pace=="medium" and tone=="neutral": pace,tone="fast","light"
     return pace,tone
 
+
+def infer_fragment_delivery(text: str, speaker: str, language_name: str, is_chat: bool) -> tuple[str, str, str]:
+    """Return emotion, pace and tone for a spoken fragment."""
+    lowered = (text or "").lower()
+    if language_name == "finnish":
+        if is_chat:
+            if any(x in lowered for x in ["wtf", "mitä helvettiä", "natsikamaa", "sairasta", "ei vittu", "jumalauta"]) or "?!" in lowered or lowered.count("!") >= 2:
+                return "järkyttynyt", "fast", "sharp"
+            if any(x in lowered for x in ["gg", "wp", "let's go", "tulessa", "kova", "äijä", "ei ole ihan paskempi", "🔥"]):
+                return "innostunut", "fast", "excited"
+            if any(x in lowered for x in ["lol", "lmao", "ihan varmasti", "jep jep", "cope", "skill issue"]):
+                return "ivallinen", "fast", "mocking"
+            if "?" in lowered:
+                return "epäuskoinen", "fast", "questioning"
+            return "reaktiivinen", "fast", "chatty"
+        if speaker == NARRATOR_NAME:
+            if any(x in lowered for x in ["jännite", "ase", "veri", "huusi", "räjähdys", "pakeni"]):
+                return "jännitteinen", "medium", "tense"
+            return "hillitty", "medium", "dry"
+        if any(x in lowered for x in ["teidän on nyt syytä", "heti", "tulkaa tänne"]):
+            return "päättäväinen", "medium", "firm"
+        if any(x in lowered for x in ["pelk", "kauhu", "järky", "apua", "ei voi olla"]):
+            return "järkyttynyt", "medium", "tense"
+        pace = "fast" if "!" in lowered else "medium"
+        tone = "questioning" if "?" in lowered else "neutral"
+        return "neutraali", pace, tone
+    emotion = infer_chat_emotion(text, []) if is_chat else "neutral"
+    pace, tone = infer_pace_and_tone(emotion, is_chat)
+    return emotion, pace, tone
+
+
+def build_delivery_instructions(base_instructions: str, text: str, speaker: str, language_name: str, emotion: str, pace: str, tone: str, is_chat: bool) -> str:
+    suffix = ""
+    if language_name == "finnish" and is_chat:
+        if emotion == "innostunut":
+            suffix = "Tämä kommentti on innostunut Twitch-chatin reaktio. Lue se nopeasti, energisesti ja hieman voitonriemuisesti."
+        elif emotion == "järkyttynyt":
+            suffix = "Tämä kommentti on järkyttynyt ja epäuskoinen chat-reaktio. Lue se nopeasti, terävästi ja reaktiivisesti."
+        elif emotion == "ivallinen":
+            suffix = "Tämä kommentti on ivallinen chat-heitto. Lue se nopeasti, kuivasti ja pilke äänessä."
+        elif emotion == "epäuskoinen":
+            suffix = "Tämä kommentti on epäuskoinen chat-kysymys. Lue se nopeasti ja kysyvän terävästi."
+        else:
+            suffix = "Tämä on nopea chat-reaktio. Pidä delivery napakkana ja elävänä."
+    elif language_name == "finnish":
+        suffix = f"Pidä tämän fragmentin sävy {emotion} ja {tone}, rytmillä {pace}."
+    return f"{base_instructions} {suffix}".strip()
+
+
+def normalise_finnish_chat_pronunciation(text: str) -> str:
+    substitutions = {
+        "WTF": "wee-tee-äf",
+        "GG": "gee-gee",
+        "WP": "vee-pee",
+        "LOL": "lol",
+        "LMAO": "äl-em-aa-oo",
+        "OMG": "oo-em-gee",
+        "FPS": "äf-pee-äs",
+        "RPG": "är-pee-gee",
+        "NPC": "än-pee-see",
+        "AI": "aa-ii",
+        "APS": "aa-pee-äs",
+    }
+    out = text
+    for key, repl in substitutions.items():
+        out = re.sub(rf"\b{re.escape(key)}\b", repl, out, flags=re.IGNORECASE)
+    return out
+
+
+def number_to_finnish_0_99(n: int, *, minute: bool = False) -> str:
+    ones = ["nolla", "yksi", "kaksi", "kolme", "neljä", "viisi", "kuusi", "seitsemän", "kahdeksan", "yhdeksän"]
+    if minute and n == 0:
+        return "tasan"
+    if minute and 0 < n < 10:
+        return f"nolla {ones[n]}"
+    if n < 10:
+        return ones[n]
+    if n == 10:
+        return "kymmenen"
+    if 11 <= n <= 19:
+        return f"{ones[n-10]}toista"
+    tens = n // 10
+    rem = n % 10
+    tens_word = ["", "", "kaksikymmentä", "kolmekymmentä", "neljäkymmentä", "viisikymmentä", "kuusikymmentä", "seitsemänkymmentä", "kahdeksankymmentä", "yhdeksänkymmentä"][tens]
+    return tens_word if rem == 0 else f"{tens_word}{ones[rem]}"
+
+
+def normalise_finnish_numbers_for_tts(text: str) -> str:
+    def repl(m: re.Match[str]) -> str:
+        lead = m.group(1)
+        hour = int(m.group(2))
+        minute = int(m.group(3))
+        return f"{lead} {number_to_finnish_0_99(hour)} {number_to_finnish_0_99(minute, minute=True)}"
+    return re.sub(r"\b([Kk]ello|[Kk]lo)\s+(\d{1,2})\.(\d{2})\b", lambda m: repl(m).replace("klo", "kello"), text)
+
 def split_plain_text(text: str, limit: int = MAX_FRAGMENT_LEN) -> list[str]:
     text = text.strip()
     if len(text) <= limit: return [text] if text else []
@@ -616,10 +711,15 @@ def to_ssml_lines(
         speaker=resolve_voice_name(row.speaker, cfg.voices, cfg.aliases)
         emojis=EMOJI_RE.findall(row.text); spoken=EMOJI_RE.sub("",row.text).strip()
         is_chat=speaker.startswith("chat")
-        emotion=infer_chat_emotion(row.text,emojis) if is_chat else "neutraali"
-        pace,tone=infer_pace_and_tone(emotion,is_chat)
+        emotion, pace, tone = infer_fragment_delivery(spoken, speaker, "finnish", is_chat)
         for chunk in split_plain_text(spoken):
             language = detect_language_name(chunk)
+            emotion, pace, tone = infer_fragment_delivery(chunk, speaker, language, is_chat)
+            tts_chunk = chunk
+            if language == "finnish" and is_chat:
+                tts_chunk = normalise_finnish_chat_pronunciation(tts_chunk)
+            if language == "finnish":
+                tts_chunk = normalise_finnish_numbers_for_tts(tts_chunk)
             profile = resolve_openai_profile(speaker, language, cfg, variant=openai_profile_variant)
             attrs = [
                 f'name="{html.escape(speaker, quote=True)}"',
@@ -629,15 +729,16 @@ def to_ssml_lines(
                 f'tone="{html.escape(tone, quote=True)}"',
             ]
             if profile:
+                instructions = build_delivery_instructions(profile.instructions, tts_chunk, speaker, language, emotion, pace, tone, is_chat)
                 attrs.extend(
                     [
                         f'openai_profile="{html.escape(profile.profile_id, quote=True)}"',
                         f'openai_voice="{html.escape(profile.voice, quote=True)}"',
                         f'openai_model="{html.escape(profile.model, quote=True)}"',
-                        f'openai_instructions="{html.escape(profile.instructions, quote=True)}"',
+                        f'openai_instructions="{html.escape(instructions, quote=True)}"',
                     ]
                 )
-            out.append(f'<voice {" ".join(attrs)}>{html.escape(chunk)}</voice>')
+            out.append(f'<voice {" ".join(attrs)}>{html.escape(tts_chunk)}</voice>')
         if i < len(segments)-1: out.append(f'<break time="{INTER_LINE_BREAK}"/>')
     return out
 
