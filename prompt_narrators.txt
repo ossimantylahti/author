@@ -15,7 +15,7 @@
     "Kertoja": {"gender": "male", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-alan-medium", "kokoro": "fi_aino"}},
     "Miksu": {"gender": "male", "ids": {"elevenlabs": "HfRP3cIhYLmeNHeTvkWK", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Elias": {"gender": "male", "ids": {"elevenlabs": "IKne3meq5aSn9XLyUdCD", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Virtasen vaimo": "female", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
+    "Virtasen vaimo": {"gender": "female", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "KRP keskus": {"gender": "male", "ids": {"elevenlabs": "eWNJGO7R0mtZgW8BqJYN", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "CherryKitten": {"gender": "female", "ids": {"elevenlabs": "CKfuQaJKfvUG2Wtrda3Y", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "chat": {"gender": "female", "ids": {"elevenlabs": "bAq8AI9QURijOtmeFFqT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
@@ -32,5 +32,10 @@
     "Reinboth": {"gender": "female", "ids": {"elevenlabs": "pbVD3LqiqlzGqszOvKuT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "Minister": {"gender": "male", "ids": {"elevenlabs": "esy0r39YPLQjOczyOib8", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Mira": {"gender": "female", "ids": {"elevenlabs": "lUCNYQh2kqW2wiie85Qk", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}}
+  },
+  "aliases": {
+    "Elias": ["Elias Korpela", "Korpela", "Reacti0n", "Reaktion"],
+    "Virtasen vaimo": ["vaimo", "nainen"],
+    "KRP keskus": ["KRP:n keskus", "päivystys", "viestintäpäivystäjä", "verkkovalvonta"]
   }
 }
