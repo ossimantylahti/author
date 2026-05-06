@@ -653,6 +653,9 @@ def main() -> int:
     fallback_voice_id = str(gender_defaults.get(args.renderer, "")).strip()
 
     voice_id = args.voice_id or choose_voice_id(args.voice_name, narrators, args.renderer, fallback_voice_id)
+    if args.renderer == "openai" and not args.voice_id and ssml_languages == {"finnish"}:
+        voice_id = "ash"
+        print("OpenAI default voice override: finnish SSML detected, using Ash.")
     if not voice_id:
         print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
         return 2
