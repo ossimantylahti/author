@@ -1,0 +1,1002 @@
+{
+  "version": 1,
+  "default_languages": [
+    "fi-FI",
+    "en-GB",
+    "en-US",
+    "es-MX"
+  ],
+  "entries": [
+    {
+      "id": "elias_korpela",
+      "graphemes": [
+        "Elias Korpela",
+        "Elias “Reacti0n” Korpela"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "ˈeliɑs ˈkorpelɑ",
+          "spoken": "Elias Korpela"
+        },
+        "en-GB": {
+          "ipa": "ˈeliɑs ˈkorpelɑ",
+          "spoken": "Elias Korpela"
+        },
+        "en-US": {
+          "ipa": "ˈeliɑs ˈkorpelɑ",
+          "spoken": "Elias Korpela"
+        },
+        "es-MX": {
+          "ipa": "ˈeliɑs ˈkorpelɑ",
+          "spoken": "Elias Korpela"
+        }
+      }
+    },
+    {
+      "id": "elias",
+      "graphemes": [
+        "Elias"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "ˈeliɑs",
+          "spoken": "Elias"
+        },
+        "en-GB": {
+          "ipa": "ˈeliɑs",
+          "spoken": "Elias"
+        },
+        "en-US": {
+          "ipa": "ˈeliɑs",
+          "spoken": "Elias"
+        },
+        "es-MX": {
+          "ipa": "ˈeliɑs",
+          "spoken": "Elias"
+        }
+      }
+    },
+    {
+      "id": "korpela",
+      "graphemes": [
+        "Korpela"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "ˈkorpelɑ",
+          "spoken": "Korpela"
+        },
+        "en-GB": {
+          "ipa": "ˈkorpelɑ",
+          "spoken": "Korpela"
+        },
+        "en-US": {
+          "ipa": "ˈkorpelɑ",
+          "spoken": "Korpela"
+        },
+        "es-MX": {
+          "ipa": "ˈkorpelɑ",
+          "spoken": "Korpela"
+        }
+      }
+    },
+    {
+      "id": "reaction",
+      "graphemes": [
+        "Reacti0n",
+        "Reakti0n",
+        "Reaction"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Reaction",
+          "spoken": "Reaction"
+        },
+        "en-GB": {
+          "alias": "Reaction",
+          "spoken": "Reaction"
+        },
+        "en-US": {
+          "alias": "Reaction",
+          "spoken": "Reaction"
+        },
+        "es-MX": {
+          "alias": "Reaction",
+          "spoken": "Reaction"
+        }
+      }
+    },
+    {
+      "id": "ossi_mantylahti",
+      "graphemes": [
+        "Ossi Mäntylahti"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "ˈosːi ˈmæntylɑhti",
+          "spoken": "Ossi Mäntylahti"
+        },
+        "en-GB": {
+          "ipa": "ˈosːi ˈmæntylɑhti",
+          "spoken": "Ossi Mäntylahti"
+        },
+        "en-US": {
+          "ipa": "ˈosːi ˈmæntylɑhti",
+          "spoken": "Ossi Mäntylahti"
+        },
+        "es-MX": {
+          "ipa": "ˈosːi ˈmæntylɑhti",
+          "spoken": "Ossi Mäntylahti"
+        }
+      }
+    },
+    {
+      "id": "mantylahti",
+      "graphemes": [
+        "Mäntylahti"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "ˈmæntylɑhti",
+          "spoken": "Mäntylahti"
+        },
+        "en-GB": {
+          "ipa": "ˈmæntylɑhti",
+          "spoken": "Mäntylahti"
+        },
+        "en-US": {
+          "ipa": "ˈmæntylɑhti",
+          "spoken": "Mäntylahti"
+        },
+        "es-MX": {
+          "ipa": "ˈmæntylɑhti",
+          "spoken": "Mäntylahti"
+        }
+      }
+    },
+    {
+      "id": "cherrykitten",
+      "graphemes": [
+        "CherryKitten"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Cherry Kitten",
+          "spoken": "Cherry Kitten"
+        },
+        "en-GB": {
+          "alias": "Cherry Kitten",
+          "spoken": "Cherry Kitten"
+        },
+        "en-US": {
+          "alias": "Cherry Kitten",
+          "spoken": "Cherry Kitten"
+        },
+        "es-MX": {
+          "alias": "Cherry Kitten",
+          "spoken": "Cherry Kitten"
+        }
+      }
+    },
+    {
+      "id": "miksu",
+      "graphemes": [
+        "Miksu"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Miksu",
+          "spoken": "Miksu"
+        },
+        "en-GB": {
+          "ipa": "Miksu",
+          "spoken": "Miksu"
+        },
+        "en-US": {
+          "ipa": "Miksu",
+          "spoken": "Miksu"
+        },
+        "es-MX": {
+          "ipa": "Miksu",
+          "spoken": "Miksu"
+        }
+      }
+    },
+    {
+      "id": "mikael_blomkvist",
+      "graphemes": [
+        "Mikael Blomkvist"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Mikael Blomkvist",
+          "spoken": "Mikael Blomkvist"
+        },
+        "en-GB": {
+          "ipa": "Mikael Blomkvist",
+          "spoken": "Mikael Blomkvist"
+        },
+        "en-US": {
+          "ipa": "Mikael Blomkvist",
+          "spoken": "Mikael Blomkvist"
+        },
+        "es-MX": {
+          "ipa": "Mikael Blomkvist",
+          "spoken": "Mikael Blomkvist"
+        }
+      }
+    },
+    {
+      "id": "jarmo_virtanen",
+      "graphemes": [
+        "Jarmo Virtanen"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Jarmo Virtanen",
+          "spoken": "Jarmo Virtanen"
+        },
+        "en-GB": {
+          "ipa": "Jarmo Virtanen",
+          "spoken": "Jarmo Virtanen"
+        },
+        "en-US": {
+          "ipa": "Jarmo Virtanen",
+          "spoken": "Jarmo Virtanen"
+        },
+        "es-MX": {
+          "ipa": "Jarmo Virtanen",
+          "spoken": "Jarmo Virtanen"
+        }
+      }
+    },
+    {
+      "id": "aaria",
+      "graphemes": [
+        "Aaria"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Aaria",
+          "spoken": "Aaria"
+        },
+        "en-GB": {
+          "ipa": "Aaria",
+          "spoken": "Aaria"
+        },
+        "en-US": {
+          "ipa": "Aaria",
+          "spoken": "Aaria"
+        },
+        "es-MX": {
+          "ipa": "Aaria",
+          "spoken": "Aaria"
+        }
+      }
+    },
+    {
+      "id": "koneko",
+      "graphemes": [
+        "Koneko"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Koneko",
+          "spoken": "Koneko"
+        },
+        "en-GB": {
+          "ipa": "Koneko",
+          "spoken": "Koneko"
+        },
+        "en-US": {
+          "ipa": "Koneko",
+          "spoken": "Koneko"
+        },
+        "es-MX": {
+          "ipa": "Koneko",
+          "spoken": "Koneko"
+        }
+      }
+    },
+    {
+      "id": "koneko-chan",
+      "graphemes": [
+        "Koneko-chan"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Koneko-chan",
+          "spoken": "Koneko-chan"
+        },
+        "en-GB": {
+          "ipa": "Koneko-chan",
+          "spoken": "Koneko-chan"
+        },
+        "en-US": {
+          "ipa": "Koneko-chan",
+          "spoken": "Koneko-chan"
+        },
+        "es-MX": {
+          "ipa": "Koneko-chan",
+          "spoken": "Koneko-chan"
+        }
+      }
+    },
+    {
+      "id": "mira",
+      "graphemes": [
+        "Mira"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Mira",
+          "spoken": "Mira"
+        },
+        "en-GB": {
+          "ipa": "Mira",
+          "spoken": "Mira"
+        },
+        "en-US": {
+          "ipa": "Mira",
+          "spoken": "Mira"
+        },
+        "es-MX": {
+          "ipa": "Mira",
+          "spoken": "Mira"
+        }
+      }
+    },
+    {
+      "id": "linnea_berg",
+      "graphemes": [
+        "Linnea Berg"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Linnea Berg",
+          "spoken": "Linnea Berg"
+        },
+        "en-GB": {
+          "ipa": "Linnea Berg",
+          "spoken": "Linnea Berg"
+        },
+        "en-US": {
+          "ipa": "Linnea Berg",
+          "spoken": "Linnea Berg"
+        },
+        "es-MX": {
+          "ipa": "Linnea Berg",
+          "spoken": "Linnea Berg"
+        }
+      }
+    },
+    {
+      "id": "otso_soini",
+      "graphemes": [
+        "Otso Soini"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Otso Soini",
+          "spoken": "Otso Soini"
+        },
+        "en-GB": {
+          "ipa": "Otso Soini",
+          "spoken": "Otso Soini"
+        },
+        "en-US": {
+          "ipa": "Otso Soini",
+          "spoken": "Otso Soini"
+        },
+        "es-MX": {
+          "ipa": "Otso Soini",
+          "spoken": "Otso Soini"
+        }
+      }
+    },
+    {
+      "id": "helsinki",
+      "graphemes": [
+        "Helsinki"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Helsinki",
+          "spoken": "Helsinki"
+        },
+        "en-GB": {
+          "ipa": "Helsinki",
+          "spoken": "Helsinki"
+        },
+        "en-US": {
+          "ipa": "Helsinki",
+          "spoken": "Helsinki"
+        },
+        "es-MX": {
+          "ipa": "Helsinki",
+          "spoken": "Helsinki"
+        }
+      }
+    },
+    {
+      "id": "vuosaari",
+      "graphemes": [
+        "Vuosaari"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Vuosaari",
+          "spoken": "Vuosaari"
+        },
+        "en-GB": {
+          "ipa": "Vuosaari",
+          "spoken": "Vuosaari"
+        },
+        "en-US": {
+          "ipa": "Vuosaari",
+          "spoken": "Vuosaari"
+        },
+        "es-MX": {
+          "ipa": "Vuosaari",
+          "spoken": "Vuosaari"
+        }
+      }
+    },
+    {
+      "id": "suomenlinna",
+      "graphemes": [
+        "Suomenlinna"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Suomenlinna",
+          "spoken": "Suomenlinna"
+        },
+        "en-GB": {
+          "ipa": "Suomenlinna",
+          "spoken": "Suomenlinna"
+        },
+        "en-US": {
+          "ipa": "Suomenlinna",
+          "spoken": "Suomenlinna"
+        },
+        "es-MX": {
+          "ipa": "Suomenlinna",
+          "spoken": "Suomenlinna"
+        }
+      }
+    },
+    {
+      "id": "ylilauta",
+      "graphemes": [
+        "Ylilauta"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Ylilauta",
+          "spoken": "Ylilauta"
+        },
+        "en-GB": {
+          "ipa": "Ylilauta",
+          "spoken": "Ylilauta"
+        },
+        "en-US": {
+          "ipa": "Ylilauta",
+          "spoken": "Ylilauta"
+        },
+        "es-MX": {
+          "ipa": "Ylilauta",
+          "spoken": "Ylilauta"
+        }
+      }
+    },
+    {
+      "id": "jodel",
+      "graphemes": [
+        "Jodel"
+      ],
+      "origin_language": "fi-FI",
+      "type": "phoneme",
+      "pronunciations": {
+        "fi-FI": {
+          "ipa": "Jodel",
+          "spoken": "Jodel"
+        },
+        "en-GB": {
+          "ipa": "Jodel",
+          "spoken": "Jodel"
+        },
+        "en-US": {
+          "ipa": "Jodel",
+          "spoken": "Jodel"
+        },
+        "es-MX": {
+          "ipa": "Jodel",
+          "spoken": "Jodel"
+        }
+      }
+    },
+    {
+      "id": "the_architect",
+      "graphemes": [
+        "The Architect"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "The Architect",
+          "spoken": "The Architect"
+        },
+        "en-GB": {
+          "alias": "The Architect",
+          "spoken": "The Architect"
+        },
+        "en-US": {
+          "alias": "The Architect",
+          "spoken": "The Architect"
+        },
+        "es-MX": {
+          "alias": "The Architect",
+          "spoken": "The Architect"
+        }
+      }
+    },
+    {
+      "id": "master",
+      "graphemes": [
+        "Master"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Master",
+          "spoken": "Master"
+        },
+        "en-GB": {
+          "alias": "Master",
+          "spoken": "Master"
+        },
+        "en-US": {
+          "alias": "Master",
+          "spoken": "Master"
+        },
+        "es-MX": {
+          "alias": "Master",
+          "spoken": "Master"
+        }
+      }
+    },
+    {
+      "id": "genzai_current",
+      "graphemes": [
+        "Genzai Current"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Genzai Current",
+          "spoken": "Genzai Current"
+        },
+        "en-GB": {
+          "alias": "Genzai Current",
+          "spoken": "Genzai Current"
+        },
+        "en-US": {
+          "alias": "Genzai Current",
+          "spoken": "Genzai Current"
+        },
+        "es-MX": {
+          "alias": "Genzai Current",
+          "spoken": "Genzai Current"
+        }
+      }
+    },
+    {
+      "id": "papertrail",
+      "graphemes": [
+        "PaperTrail"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Paper Trail",
+          "spoken": "Paper Trail"
+        },
+        "en-GB": {
+          "alias": "Paper Trail",
+          "spoken": "Paper Trail"
+        },
+        "en-US": {
+          "alias": "Paper Trail",
+          "spoken": "Paper Trail"
+        },
+        "es-MX": {
+          "alias": "Paper Trail",
+          "spoken": "Paper Trail"
+        }
+      }
+    },
+    {
+      "id": "snow_angel",
+      "graphemes": [
+        "Snow Angel"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Snow Angel",
+          "spoken": "Snow Angel"
+        },
+        "en-GB": {
+          "alias": "Snow Angel",
+          "spoken": "Snow Angel"
+        },
+        "en-US": {
+          "alias": "Snow Angel",
+          "spoken": "Snow Angel"
+        },
+        "es-MX": {
+          "alias": "Snow Angel",
+          "spoken": "Snow Angel"
+        }
+      }
+    },
+    {
+      "id": "nordictruth88",
+      "graphemes": [
+        "NordicTruth88"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Nordic Truth eighty eight",
+          "spoken": "Nordic Truth eighty eight"
+        },
+        "en-GB": {
+          "alias": "Nordic Truth eighty eight",
+          "spoken": "Nordic Truth eighty eight"
+        },
+        "en-US": {
+          "alias": "Nordic Truth eighty eight",
+          "spoken": "Nordic Truth eighty eight"
+        },
+        "es-MX": {
+          "alias": "Nordic Truth eighty eight",
+          "spoken": "Nordic Truth eighty eight"
+        }
+      }
+    },
+    {
+      "id": "otsogoesgreen",
+      "graphemes": [
+        "OtsoGoesGreen"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Otso Goes Green",
+          "spoken": "Otso Goes Green"
+        },
+        "en-GB": {
+          "alias": "Otso Goes Green",
+          "spoken": "Otso Goes Green"
+        },
+        "en-US": {
+          "alias": "Otso Goes Green",
+          "spoken": "Otso Goes Green"
+        },
+        "es-MX": {
+          "alias": "Otso Goes Green",
+          "spoken": "Otso Goes Green"
+        }
+      }
+    },
+    {
+      "id": "twitch",
+      "graphemes": [
+        "Twitch"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Twitch",
+          "spoken": "Twitch"
+        },
+        "en-GB": {
+          "alias": "Twitch",
+          "spoken": "Twitch"
+        },
+        "en-US": {
+          "alias": "Twitch",
+          "spoken": "Twitch"
+        },
+        "es-MX": {
+          "alias": "Twitch",
+          "spoken": "Twitch"
+        }
+      }
+    },
+    {
+      "id": "youtube",
+      "graphemes": [
+        "YouTube"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "YouTube",
+          "spoken": "YouTube"
+        },
+        "en-GB": {
+          "alias": "YouTube",
+          "spoken": "YouTube"
+        },
+        "en-US": {
+          "alias": "YouTube",
+          "spoken": "YouTube"
+        },
+        "es-MX": {
+          "alias": "YouTube",
+          "spoken": "YouTube"
+        }
+      }
+    },
+    {
+      "id": "counter_strike",
+      "graphemes": [
+        "Counter-Strike"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Counter Strike",
+          "spoken": "Counter Strike"
+        },
+        "en-GB": {
+          "alias": "Counter Strike",
+          "spoken": "Counter Strike"
+        },
+        "en-US": {
+          "alias": "Counter Strike",
+          "spoken": "Counter Strike"
+        },
+        "es-MX": {
+          "alias": "Counter Strike",
+          "spoken": "Counter Strike"
+        }
+      }
+    },
+    {
+      "id": "csgo",
+      "graphemes": [
+        "CS:GO"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "CSGO",
+          "spoken": "CSGO"
+        },
+        "en-GB": {
+          "alias": "CSGO",
+          "spoken": "CSGO"
+        },
+        "en-US": {
+          "alias": "CSGO",
+          "spoken": "CSGO"
+        },
+        "es-MX": {
+          "alias": "CSGO",
+          "spoken": "CSGO"
+        }
+      }
+    },
+    {
+      "id": "satisfactory",
+      "graphemes": [
+        "Satisfactory"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Satisfactory",
+          "spoken": "Satisfactory"
+        },
+        "en-GB": {
+          "alias": "Satisfactory",
+          "spoken": "Satisfactory"
+        },
+        "en-US": {
+          "alias": "Satisfactory",
+          "spoken": "Satisfactory"
+        },
+        "es-MX": {
+          "alias": "Satisfactory",
+          "spoken": "Satisfactory"
+        }
+      }
+    },
+    {
+      "id": "hashtag_reaction",
+      "graphemes": [
+        "#Reacti0nReturns"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "#Reaction Returns",
+          "spoken": "#Reaction Returns"
+        },
+        "en-GB": {
+          "alias": "#Reaction Returns",
+          "spoken": "#Reaction Returns"
+        },
+        "en-US": {
+          "alias": "#Reaction Returns",
+          "spoken": "#Reaction Returns"
+        },
+        "es-MX": {
+          "alias": "#Reaction Returns",
+          "spoken": "#Reaction Returns"
+        }
+      }
+    },
+    {
+      "id": "p3kka99",
+      "graphemes": [
+        "P3kka99"
+      ],
+      "origin_language": "fi-FI",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "Pekka ninety nine",
+          "spoken": "Pekka ninety nine"
+        },
+        "en-GB": {
+          "alias": "Pekka ninety nine",
+          "spoken": "Pekka ninety nine"
+        },
+        "en-US": {
+          "alias": "Pekka ninety nine",
+          "spoken": "Pekka ninety nine"
+        },
+        "es-MX": {
+          "alias": "Pekka noventa y nueve",
+          "spoken": "Pekka noventa y nueve"
+        }
+      }
+    },
+    {
+      "id": "observer",
+      "graphemes": [
+        "0bserver"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "observer",
+          "spoken": "observer"
+        },
+        "en-GB": {
+          "alias": "observer",
+          "spoken": "observer"
+        },
+        "en-US": {
+          "alias": "observer",
+          "spoken": "observer"
+        },
+        "es-MX": {
+          "alias": "observer",
+          "spoken": "observer"
+        }
+      }
+    },
+    {
+      "id": "mod_l4uri",
+      "graphemes": [
+        "mod_l4uri"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "mod lauri",
+          "spoken": "mod lauri"
+        },
+        "en-GB": {
+          "alias": "mod lauri",
+          "spoken": "mod lauri"
+        },
+        "en-US": {
+          "alias": "mod lauri",
+          "spoken": "mod lauri"
+        },
+        "es-MX": {
+          "alias": "mod lauri",
+          "spoken": "mod lauri"
+        }
+      }
+    },
+    {
+      "id": "s1lencepls",
+      "graphemes": [
+        "s1lencepls"
+      ],
+      "origin_language": "en-US",
+      "type": "alias",
+      "pronunciations": {
+        "fi-FI": {
+          "alias": "silence please",
+          "spoken": "silence please"
+        },
+        "en-GB": {
+          "alias": "silence please",
+          "spoken": "silence please"
+        },
+        "en-US": {
+          "alias": "silence please",
+          "spoken": "silence please"
+        },
+        "es-MX": {
+          "alias": "silence please",
+          "spoken": "silence please"
+        }
+      }
+    }
+  ]
+}
