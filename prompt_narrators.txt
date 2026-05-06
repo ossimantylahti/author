@@ -28,6 +28,7 @@
     "chat-mod": {"gender": "male", "ids": {"elevenlabs": "BjCmiOq9A2piF1gMic0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Virtanen": {"gender": "male", "ids": {"elevenlabs": "hU9xpIwLBrQ7ueYNjP7b", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Kuosmanen": {"gender": "male", "ids": {"elevenlabs": "0m71kiyu84bdUcKDzG0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
+    "Eetu": {"gender": "male", "ids": {"elevenlabs": "0m71kiyu84bdUcKDzG0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
     "Sannii": {"gender": "female", "ids": {"elevenlabs": "XdflFrQO8wbGpWMNZHFr", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "Reinboth": {"gender": "female", "ids": {"elevenlabs": "pbVD3LqiqlzGqszOvKuT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
     "Minister": {"gender": "male", "ids": {"elevenlabs": "esy0r39YPLQjOczyOib8", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
