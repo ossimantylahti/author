@@ -268,6 +268,38 @@ def extract_openai_ssml_options(text: str) -> tuple[str | None, str | None, str 
     return read_attr("openai_voice"), read_attr("openai_model"), read_attr("openai_instructions")
 
 
+def extract_ssml_languages(text: str) -> set[str]:
+    langs = set()
+    for attrs in re.findall(r"<voice\s+([^>]*)>", text, flags=re.IGNORECASE):
+        m = re.search(r'language="([^"]+)"', attrs, flags=re.IGNORECASE)
+        if m and m.group(1).strip():
+            langs.add(m.group(1).strip().lower())
+    return langs
+
+
+def has_openai_language_instructions(text: str) -> bool:
+    for attrs in re.findall(r"<voice\s+([^>]*)>", text, flags=re.IGNORECASE):
+        m = re.search(r'openai_instructions="([^"]+)"', attrs, flags=re.IGNORECASE)
+        if not m:
+            continue
+        instructions = m.group(1).strip().lower()
+        if any(k in instructions for k in ("lue suomeksi", "read in english", "lee en español", "lee en espanol")):
+            return True
+    return False
+
+
+def resolve_pronunciation_language(cli_language: str | None, ssml_languages: set[str]) -> tuple[str, str | None]:
+    if cli_language:
+        return cli_language, None
+    mapping = {"finnish": "fi-FI", "english": "en-GB", "spanish": "es-MX"}
+    if len(ssml_languages) == 1:
+        only = next(iter(ssml_languages))
+        return mapping.get(only, "en-GB"), None
+    if len(ssml_languages) > 1:
+        return "en-GB", "Multiple SSML languages detected; using pronunciation fallback language en-GB."
+    return "en-GB", None
+
+
 def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
     part_files = sorted(out_dir.glob("*.mp3"))
     if not part_files:
@@ -569,7 +601,9 @@ def main() -> int:
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
     parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
     parser.add_argument("--pronunciation-dictionary", default=None)
-    parser.add_argument("--language", default="en-GB")
+    parser.add_argument("--language", default=None, help="Pronunciation dictionary language/fallback language, not necessarily the spoken language of every SSML fragment.")
+    parser.add_argument("--content", default=None, help="Luvun tunniste muodossa ACT.LUKU, esim. 2.8 (otsikkofragmenttia varten).")
+    parser.add_argument("--chapter-title", default=None, help="Luvun otsikko; lisätään ensimmäiseksi fragmentiksi.")
     parser.add_argument("--generate-pls", action="store_true")
     parser.add_argument("--pls-out-dir", default="pronunciation_exports")
     parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper")
@@ -590,13 +624,15 @@ def main() -> int:
 
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
     narrators = load_narrators(Path(args.narrators_file))
+    ssml_languages = extract_ssml_languages(content)
+    pronunciation_language, pronunciation_lang_note = resolve_pronunciation_language(args.language, ssml_languages)
     pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
     pronunciation_dictionary = None
     pronunciation_map: list[tuple[re.Pattern[str], str, str]] = []
     dictionary_path = Path(args.pronunciation_dictionary) if args.pronunciation_dictionary else None
     if dictionary_path and dictionary_path.exists():
         pronunciation_dictionary = load_pronunciation_dictionary(dictionary_path)
-        pronunciation_map = build_pronunciation_map(pronunciation_dictionary, args.language)
+        pronunciation_map = build_pronunciation_map(pronunciation_dictionary, pronunciation_language)
     elif args.pronunciation_dictionary:
         print(f"Virhe: pronunciation dictionaryä ei löydy: {args.pronunciation_dictionary}", file=sys.stderr)
         return 2
@@ -617,6 +653,9 @@ def main() -> int:
     fallback_voice_id = str(gender_defaults.get(args.renderer, "")).strip()
 
     voice_id = args.voice_id or choose_voice_id(args.voice_name, narrators, args.renderer, fallback_voice_id)
+    if args.renderer == "openai" and not args.voice_id and ssml_languages == {"finnish"}:
+        voice_id = "ash"
+        print("OpenAI default voice override: finnish SSML detected, using Ash.")
     if not voice_id:
         print(f"Virhe: hahmoa '{args.voice_name}' ei löydy tiedostosta {args.narrators_file}", file=sys.stderr)
         return 2
@@ -624,21 +663,38 @@ def main() -> int:
     model_id = args.model_id or MODEL_MAP[args.model]
     chunk_limit = min(args.chunk_limit, MAX_RENDERER_CHUNK_LIMIT)
     chunks = split_ssml_chunks(content, chunk_limit)
+    if args.content and args.chapter_title:
+        num_map = {"0": "nolla", "1": "yksi", "2": "kaksi", "3": "kolme", "4": "neljä", "5": "viisi", "6": "kuusi", "7": "seitsemän", "8": "kahdeksan", "9": "yhdeksän"}
+        spoken_idx = " ".join("piste" if ch == "." else num_map.get(ch, ch) for ch in args.content.strip())
+        heading = f"Luku {args.content.strip()} {args.chapter_title.strip()}"
+        heading_spoken = f"Luku {spoken_idx} {args.chapter_title.strip()}"
+        heading_chunk = f'<speak>\n<voice name="{NARRATOR_NAME}" language="finnish" openai_instructions="Lue suomeksi selkeästi ja luonnollisesti.">{escape(heading_spoken)}</voice>\n</speak>'
+        chunks.insert(0, (NARRATOR_NAME, heading_chunk))
+        print(f"Luvun otsikko lisätty: {heading}")
     print(f"Voice: {args.voice_name} -> {voice_id}")
     if args.renderer == "elevenlabs":
         print(f"Model: {args.model} ({model_id})")
     elif args.renderer == "openai":
         print("Model: gpt-4o-mini-tts")
     print(f"Chunkit: {len(chunks)} kpl")
-    if pronunciation_locators:
-        print(f"Ääntämissanastoja: {len(pronunciation_locators)} kpl")
-    print(f"Kieli: {args.language}")
-    print(f"Pronunciation-entryjä: {len(pronunciation_map)}")
+    print(f"Pronunciation dictionary language: {pronunciation_language}")
+    print(f"Pronunciation entries loaded: {len(pronunciation_map)}")
+    print(f"SSML fragment languages detected: {', '.join(sorted(ssml_languages)) if ssml_languages else 'none'}")
+    if args.renderer == "openai":
+        if has_openai_language_instructions(content):
+            print("OpenAI language guidance: from per-fragment openai_instructions")
+        elif ssml_languages:
+            print("OpenAI language guidance: inferred from <voice language=\"...\"> attributes")
+    if pronunciation_lang_note:
+        print(pronunciation_lang_note)
     if pronunciation_map:
         preview = [f"{term} -> {repl}" for _, repl, term in pronunciation_map[:20]]
         print(f"Aktiiviset replacementit (max20): {preview}")
-    if pronunciation_locators:
-        print(f"ElevenLabs locatorit: {pronunciation_locators}")
+    if args.renderer == "elevenlabs":
+        if pronunciation_locators:
+            print(f"ElevenLabs pronunciation locators: {pronunciation_locators}")
+    elif pronunciation_locators and len(pronunciation_map) == 0:
+        print(f"Warning: ElevenLabs pronunciation locators are loaded, but renderer is {args.renderer}. These locators are only used by ElevenLabs. OpenAI/Piper/Kokoro need local pronunciation_dictionary.json entries.")
 
     if args.generate_pls:
         if not pronunciation_dictionary:
