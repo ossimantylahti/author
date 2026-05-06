@@ -308,22 +308,22 @@ def looks_like_renderer_voice_id(renderer: str, value: str) -> bool:
     return False
 
 
-def map_ssml_language_to_bcp47(language: str | None) -> str | None:
+def normalise_ssml_language(language: str | None) -> str | None:
     value = (language or "").strip().lower()
     mapping = {
-        "finnish": "fi_FI",
-        "fi": "fi_FI",
-        "fi-fi": "fi_FI",
-        "suomi": "fi_FI",
-        "english": "en_US",
-        "en": "en_US",
-        "en-us": "en_US",
-        "en-gb": "en_GB",
-        "spanish": "es_ES",
-        "es": "es_ES",
-        "es-mx": "es_MX",
-        "espanol": "es_ES",
-        "español": "es_ES",
+        "finnish": "fi-FI",
+        "fi": "fi-FI",
+        "fi-fi": "fi-FI",
+        "suomi": "fi-FI",
+        "english": "en-GB",
+        "en": "en-GB",
+        "en-gb": "en-GB",
+        "en-us": "en-US",
+        "spanish": "es-MX",
+        "es": "es-MX",
+        "es-mx": "es-MX",
+        "espanol": "es-MX",
+        "español": "es-MX",
     }
     return mapping.get(value)
 
@@ -336,13 +336,14 @@ def piper_voice_language_prefix(voice_id: str) -> str | None:
 def validate_piper_language_match(text: str, voice_id: str) -> tuple[str | None, str | None]:
     attrs = extract_voice_attrs(text)
     ssml_language = attrs.get("language")
-    expected = map_ssml_language_to_bcp47(ssml_language)
+    expected = normalise_ssml_language(ssml_language)
     actual = piper_voice_language_prefix(voice_id)
     print(f"Piper language expected from SSML: {expected or 'unknown'}")
     print(f"Piper voice language: {actual or 'unknown'}")
     if not expected or not actual:
         return expected, actual
-    if expected != actual:
+    expected_prefix = expected.replace("-", "_") if expected else None
+    if expected_prefix and expected_prefix != actual:
         print(
             f"Warning: SSML language is {ssml_language!r} ({expected}), but Piper voice '{voice_id}' appears to be {actual}. "
             "Piper language is controlled by the selected voice model, so pronunciation may be wrong.",
@@ -351,23 +352,58 @@ def validate_piper_language_match(text: str, voice_id: str) -> tuple[str | None,
     return expected, actual
 
 
-def narrator_voice_id(narrators: dict[str, Any], narrator_name: str, renderer: str) -> str | None:
+def _language_variants(language: str | None) -> list[str]:
+    if not language:
+        return []
+    variants: dict[str, list[str]] = {
+        "fi-FI": ["fi-FI", "fi", "finnish"],
+        "en-GB": ["en-GB", "en", "english"],
+        "en-US": ["en-US", "en", "english"],
+        "es-MX": ["es-MX", "es", "spanish"],
+    }
+    return variants.get(language, [language])
+
+
+def _legacy_voice_matches_language(renderer: str, voice_id: str, language: str | None) -> bool:
+    if not language or renderer != "piper":
+        return True
+    prefixes = {
+        "fi-FI": ("fi_FI-",),
+        "en-GB": ("en_GB-",),
+        "en-US": ("en_US-",),
+        "es-MX": ("es_MX-", "es_ES-"),
+    }
+    return any(voice_id.strip().startswith(prefix) for prefix in prefixes.get(language, ()))
+
+
+def narrator_voice_id(narrators: dict[str, Any], narrator_name: str, renderer: str, language: str | None = None) -> str | None:
     voices = narrators.get("voices", {})
     speaker_data = voices.get(narrator_name, {}) if isinstance(voices, dict) else {}
     if not isinstance(speaker_data, dict):
         return None
     ids = speaker_data.get("ids", {})
-    if isinstance(ids, dict) and ids.get(renderer):
-        return str(ids[renderer])
+    if not isinstance(ids, dict):
+        return None
+    renderer_value = ids.get(renderer)
+    if isinstance(renderer_value, dict):
+        normalised = normalise_ssml_language(language)
+        for key in _language_variants(normalised):
+            value = renderer_value.get(key)
+            if value:
+                return str(value)
+        return None
+    if isinstance(renderer_value, str) and _legacy_voice_matches_language(renderer, renderer_value, normalise_ssml_language(language)):
+        return renderer_value
     return None
 
 
-def fallback_narrator_voice_id(narrators: dict[str, Any], renderer: str) -> str | None:
-    return narrator_voice_id(narrators, NARRATOR_NAME, renderer)
+def fallback_narrator_voice_id(narrators: dict[str, Any], renderer: str, language: str | None = None) -> str | None:
+    return narrator_voice_id(narrators, NARRATOR_NAME, renderer, language)
 
 
 def resolve_voice_id_for_fragment(renderer: str, fragment_text: str, speaker: str, narrators: dict[str, Any], cli_voice_name: str | None, cli_voice_id: str | None) -> tuple[str, str]:
     attrs = extract_voice_attrs(fragment_text)
+    ssml_language = normalise_ssml_language(attrs.get("language"))
     renderer_attr = attrs.get(f"{renderer}_voice")
     if renderer_attr:
         return renderer_attr, "ssml_renderer_attribute"
@@ -377,17 +413,17 @@ def resolve_voice_id_for_fragment(renderer: str, fragment_text: str, speaker: st
         return voice_name, "ssml_direct_voice_id"
 
     if voice_name:
-        mapped = narrator_voice_id(narrators, voice_name, renderer)
+        mapped = narrator_voice_id(narrators, voice_name, renderer, ssml_language)
         if mapped:
-            return mapped, "narrator_mapping"
+            return mapped, "narrator_mapping_language_specific" if ssml_language else "narrator_mapping"
 
-    speaker_mapped = narrator_voice_id(narrators, speaker, renderer)
+    speaker_mapped = narrator_voice_id(narrators, speaker, renderer, ssml_language)
     if speaker_mapped:
-        return speaker_mapped, "narrator_mapping"
+        return speaker_mapped, "narrator_mapping_language_specific" if ssml_language else "narrator_mapping"
 
-    fallback_voice = fallback_narrator_voice_id(narrators, renderer)
+    fallback_voice = fallback_narrator_voice_id(narrators, renderer, ssml_language)
     if fallback_voice:
-        return fallback_voice, "narrator_fallback_kertoja"
+        return fallback_voice, "narrator_fallback_kertoja_language_specific" if ssml_language else "narrator_fallback_kertoja"
 
     if cli_voice_id:
         print("Warning: using deprecated CLI voice fallback. Prefer SSML voice attributes or prompt_narrators.txt.")
@@ -695,33 +731,14 @@ def collect_renderer_voices_from_ssml(text: str, renderer: str) -> set[str]:
 
 def ensure_piper_ready(content: str, narrators: dict[str, Any], cli_voice_id: str | None) -> None:
     candidate_voices = collect_renderer_voices_from_ssml(content, "piper")
-    fallback = fallback_narrator_voice_id(narrators, "piper")
-    if fallback:
-        candidate_voices.add(fallback)
+    for language in ("fi-FI", "en-GB", "en-US", "es-MX", None):
+        fallback = fallback_narrator_voice_id(narrators, "piper", language)
+        if fallback:
+            candidate_voices.add(fallback)
     if cli_voice_id:
         candidate_voices.add(cli_voice_id)
     for voice_id in sorted(candidate_voices):
         ensure_piper_voice_available(voice_id)
-
-
-def maybe_apply_piper_finnish_fallback(text: str, voice_id: str, voice_source: str, narrators: dict[str, Any]) -> str:
-    attrs = extract_voice_attrs(text)
-    expected = map_ssml_language_to_bcp47(attrs.get("language"))
-    actual = piper_voice_language_prefix(voice_id)
-    if expected != "fi_FI":
-        return voice_id
-    if actual == "fi_FI":
-        return voice_id
-    if voice_source == "ssml_renderer_attribute":
-        return voice_id
-    fallback_voice = fallback_narrator_voice_id(narrators, "piper")
-    if fallback_voice:
-        print(
-            f"Warning: Piper voice '{voice_id}' does not match Finnish SSML; using fallback narrator Kertoja Piper voice '{fallback_voice}'.",
-            file=sys.stderr,
-        )
-        return fallback_voice
-    return voice_id
 
 
 def map_kokoro_language(language: str | None) -> str:
@@ -777,6 +794,12 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
 
     if renderer == "piper":
         text = apply_pronunciation_aliases(text, pronunciation_map or [])
+        expected = normalise_ssml_language(extract_voice_attrs(text).get("language"))
+        if expected == "fi-FI" and not voice_id.strip().startswith("fi_FI-"):
+            raise RuntimeError(
+                f"Error: Finnish SSML fragment resolved to non-Finnish Piper voice '{voice_id}'. "
+                "Configure voices.Kertoja.ids.piper.fi-FI or the character-specific piper.fi-FI voice."
+            )
         validate_piper_language_match(text, voice_id)
         cmd = ["piper", "--model", voice_id, "--output_file", str(out_path)]
         proc = subprocess.run(cmd, input=strip_ssml_tags(text), text=True, capture_output=True)
@@ -820,6 +843,8 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
         ]
         attrs = extract_voice_attrs(text)
         mapped_lang = map_kokoro_language(attrs.get("language")) if attrs.get("language") else detect_kokoro_fallback_language(text, cli_language)
+        if attrs.get("language") and mapped_lang == "en-us" and normalise_ssml_language(attrs.get("language")) in {"fi-FI", "es-MX"}:
+            raise RuntimeError("Kokoro language mapping is missing for this SSML language; configure a language-specific Kokoro voice.")
         cmd.extend(["--lang", mapped_lang])
         print(f"Kokoro language: {mapped_lang}")
         if attrs.get("language", "").strip().lower() == "finnish" and mapped_lang != "fi":
@@ -1039,7 +1064,17 @@ def main() -> int:
         chunks.insert(0, (NARRATOR_NAME, heading_chunk))
         print(f"Luvun otsikko lisätty: {heading}")
     print(f"Renderer: {args.renderer}")
-    print(f"Fallback narrator: {NARRATOR_NAME} -> {fallback_voice_id or 'none'}")
+    renderer_ids = narrators.get("voices", {}).get(NARRATOR_NAME, {}).get("ids", {}).get(args.renderer)
+    if isinstance(renderer_ids, dict):
+        print(f"Fallback narrator voices for renderer {args.renderer}:")
+        for language in ("fi-FI", "en-GB", "en-US", "es-MX"):
+            value = narrator_voice_id(narrators, NARRATOR_NAME, args.renderer, language)
+            print(f"  {language} -> {value or 'not configured'}")
+    else:
+        print(f"Fallback narrator voice for renderer {args.renderer}:")
+        print(f"  legacy -> {fallback_voice_id or 'none'}")
+        if isinstance(renderer_ids, str):
+            print("Warning: legacy single-language fallback may be unsafe for multilingual SSML.")
     if args.voice_name or args.voice_id:
         print(f"CLI voice fallback: voice-name={args.voice_name or 'none'} voice-id={args.voice_id or 'none'} (deprecated)")
     else:
@@ -1115,13 +1150,11 @@ def main() -> int:
                 chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, before, speaker, narrators, args.voice_name, args.voice_id)
                 out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
                 before_attrs = extract_voice_attrs(before)
-                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source} language={before_attrs.get('language', 'unknown')}")
+                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source} ssml_language={normalise_ssml_language(before_attrs.get('language')) or 'unknown'}")
                 try:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        if args.renderer == "piper":
-                            chunk_voice_id = maybe_apply_piper_finnish_fallback(before, chunk_voice_id, chunk_voice_source, narrators)
                         chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
@@ -1189,9 +1222,7 @@ def main() -> int:
                         if not clean_text:
                             continue
                         frag_attrs = extract_voice_attrs(frag_text)
-                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source} language={frag_attrs.get('language', 'unknown')}")
-                        if args.renderer == "piper":
-                            resolved_voice_id = maybe_apply_piper_finnish_fallback(frag_text, resolved_voice_id, resolved_voice_source, narrators)
+                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source} ssml_language={normalise_ssml_language(frag_attrs.get('language')) or 'unknown'}")
                         render_text = frag_text if args.renderer == "piper" else clean_text
                         chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, render_text, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language)
                     part_no += 1
