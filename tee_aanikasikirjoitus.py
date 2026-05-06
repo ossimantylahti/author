@@ -295,6 +295,38 @@ def final_voice_gate(ssml: str, narrators: dict[str, str]) -> str:
         return m.group(0).replace(val, NARRATOR_NAME)
     return re.sub(r'voice name="([^"]*)"', repl, ssml)
 
+
+def normalise_content_for_filename(content: str | None) -> str:
+    if not content:
+        return "output"
+    value = content.strip()
+    if re.fullmatch(r"\d+\.\d+", value):
+        major, minor = value.split(".", maxsplit=1)
+        return f"{int(major):02d}_{int(minor):02d}"
+    cleaned = re.sub(r"[^0-9A-Za-z_-]+", "_", value).strip("_")
+    return cleaned or "output"
+
+
+def resolve_output_path(output_arg: str | None, content: str | None, input_path: Path) -> Path:
+    name_root = normalise_content_for_filename(content)
+    auto_file_name = f"{name_root}_audiobook_ssml.xml"
+    if not output_arg:
+        return Path(auto_file_name)
+
+    output_path = Path(output_arg)
+    output_looks_like_dir = output_arg.endswith(("/", "\\"))
+    if output_path.exists() and output_path.is_dir():
+        output_looks_like_dir = True
+    if not output_path.exists() and output_path.suffix == "":
+        output_looks_like_dir = True
+
+    if output_looks_like_dir:
+        output_path.mkdir(parents=True, exist_ok=True)
+        return output_path / auto_file_name
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    return output_path
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
     parser.add_argument("--input", required=True); parser.add_argument("--content", required=False)
@@ -307,7 +339,8 @@ def main() -> int:
         print(f"Virhe: {e}", file=sys.stderr); return 2
     ssml = "<speak>\n" + "\n".join(to_ssml_lines(section, cfg.voices, cfg.aliases)) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
-    out = Path(args.output or f"{act_no:02d}_{chapter_no:02d}_{title}_ssml.xml")
+    out = resolve_output_path(args.output, args.content, Path(args.input))
+    print(f"Writing SSML to: {out}")
     out.write_text(ssml, encoding="utf-8")
     print(f"Kirjoitettu: {out}")
     return 0
