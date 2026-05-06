@@ -46,6 +46,16 @@ EMOJI_RE = re.compile(
     "]+",
     flags=re.UNICODE,
 )
+SPEECH_VERBS = (
+    "sanoi",
+    "kysyi",
+    "vastasi",
+    "huusi",
+    "totesi",
+    "toisti",
+    "kertoi",
+    "huikkasi",
+)
 
 
 def style_level(style_name: str) -> int | None:
@@ -341,19 +351,135 @@ def annotate_with_openai(lines: list[dict[str, str]], model: str) -> list[dict[s
     return lines
 
 
+def build_alias_map(narrators: dict[str, str]) -> dict[str, str]:
+    alias_map: dict[str, str] = {}
+    lowered_keys = {k.lower(): k for k in narrators}
+
+    def bind(alias: str, target: str) -> None:
+        if target in narrators:
+            alias_map[alias.lower()] = target
+
+    for key in narrators:
+        bind(key, key)
+    bind("narrator", NARRATOR_NAME)
+    bind("kertoja", NARRATOR_NAME)
+
+    if "Vaimo" in narrators:
+        for alias in ("vaimo", "virtasen vaimo", "nainen", "rouva"):
+            bind(alias, "Vaimo")
+    elif "Virtasen vaimo" in narrators:
+        for alias in ("vaimo", "virtasen vaimo", "nainen", "rouva"):
+            bind(alias, "Virtasen vaimo")
+
+    for target in narrators:
+        if target.lower() == "krp:n keskus":
+            for alias in ("krp:n keskus", "päivystys", "viestintäpäivystäjä", "verkkovalvonta"):
+                bind(alias, target)
+        if target.lower() == "elias korpela":
+            for alias in ("elias korpela", "elias", "reacti0n", "esiintyjä", "kameraan ilmestynyt hahmo"):
+                bind(alias, target)
+    if "Elias Korpela" not in narrators:
+        for fallback in narrators:
+            if fallback.lower() in {"elias", "reacti0n"}:
+                for alias in ("elias korpela", "elias", "reacti0n", "esiintyjä", "kameraan ilmestynyt hahmo"):
+                    bind(alias, fallback)
+                break
+    return alias_map
+
+
+def safe_voice_name(candidate: str, narrators: dict[str, str], alias_map: dict[str, str]) -> str:
+    raw = (candidate or "").strip()
+    if not raw:
+        return NARRATOR_NAME
+    if raw in narrators:
+        return raw
+    if len(raw) > 32 or len(raw.split()) > 3:
+        return NARRATOR_NAME
+    if re.search(r"[.,:;!?]", raw):
+        return NARRATOR_NAME
+    if not re.fullmatch(r"[A-Za-zÅÄÖåäö0-9'’\- ]+", raw):
+        return NARRATOR_NAME
+    return alias_map.get(raw.lower(), NARRATOR_NAME)
+
+
+def detect_speaker_from_context(text: str, narrators: dict[str, str], alias_map: dict[str, str]) -> str:
+    lowered = text.lower()
+    for alias, target in alias_map.items():
+        if alias in lowered:
+            for verb in SPEECH_VERBS:
+                if verb in lowered:
+                    return safe_voice_name(target, narrators, alias_map)
+    return NARRATOR_NAME
+
+
+def parse_script_lines(text: str, narrators: dict[str, str]) -> list[dict[str, str]]:
+    alias_map = build_alias_map(narrators)
+    parsed: list[dict[str, str]] = []
+    pending_speaker = NARRATOR_NAME
+    last_named_context = NARRATOR_NAME
+    last_dialogue_speaker = NARRATOR_NAME
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"^([^:]+):\s*(.*)$", line)
+        if m:
+            candidate = m.group(1).strip()
+            resolved = safe_voice_name(candidate, narrators, alias_map)
+            if resolved != NARRATOR_NAME:
+                speaker = resolved
+                spoken = m.group(2).strip()
+            else:
+                speaker = NARRATOR_NAME
+                spoken = line
+        elif line.startswith("–"):
+            spoken = line[1:].strip()
+            speaker = pending_speaker
+            if speaker == NARRATOR_NAME:
+                speaker = detect_speaker_from_context(spoken, narrators, alias_map)
+            if speaker == NARRATOR_NAME and last_dialogue_speaker != NARRATOR_NAME:
+                if last_dialogue_speaker == "Eetu" and "Virtanen" in narrators:
+                    speaker = "Virtanen"
+                elif last_dialogue_speaker == "Virtanen" and "Eetu" in narrators:
+                    speaker = "Eetu"
+            if speaker == NARRATOR_NAME and last_named_context != NARRATOR_NAME:
+                speaker = last_named_context
+            ending = re.search(r",\s*([A-ZÅÄÖa-zåäö][^,.:;!?]{0,30})\s+(" + "|".join(SPEECH_VERBS) + r")\b", spoken, re.IGNORECASE)
+            if ending:
+                speaker = safe_voice_name(ending.group(1), narrators, alias_map)
+            if speaker != NARRATOR_NAME:
+                last_dialogue_speaker = speaker
+        else:
+            speaker = NARRATOR_NAME
+            spoken = line
+
+        if speaker != NARRATOR_NAME:
+            last_named_context = speaker
+        if speaker == NARRATOR_NAME and spoken.endswith(":"):
+            pending_speaker = detect_speaker_from_context(spoken, narrators, alias_map)
+        elif speaker == NARRATOR_NAME:
+            inferred = NARRATOR_NAME
+            for alias in ("Eetu", "Virtanen", "Vaimo", "Virtasen vaimo", "KRP:n keskus", "Elias Korpela"):
+                inferred = safe_voice_name(alias, narrators, alias_map)
+                if inferred != NARRATOR_NAME and re.search(rf"\b{re.escape(alias.split()[0])}\b", spoken, re.IGNORECASE):
+                    break
+                inferred = NARRATOR_NAME
+            pending_speaker = inferred
+        else:
+            pending_speaker = NARRATOR_NAME
+        parsed.append({"speaker": speaker, "text": spoken})
+    return parsed
+
+
 def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai_model: str) -> list[str]:
     normalized, _ = normalize_unknown_characters(text, narrators)
     chat_pool = [k for k in narrators if re.fullmatch(r"chat\d*", k)]
     nick_voice: dict[str, str] = {}
     parsed: list[dict[str, str]] = []
-    for raw in normalized.splitlines():
-        if not raw.strip():
-            continue
-        m = re.match(r"^([^:]+):\s*(.*)$", raw)
-        if m:
-            speaker, spoken = m.group(1).strip(), m.group(2).strip()
-        else:
-            speaker, spoken = NARRATOR_NAME, raw.strip()
+    alias_map = build_alias_map(narrators)
+    for parsed_row in parse_script_lines(normalized, narrators):
+        speaker, spoken = parsed_row["speaker"], parsed_row["text"]
         original = spoken
         emojis = EMOJI_RE.findall(spoken)
         spoken = EMOJI_RE.sub("", spoken).strip()
@@ -373,7 +499,7 @@ def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai
             emotion = "neutraali"
         parsed.append(
             {
-                "speaker": speaker,
+                "speaker": safe_voice_name(speaker, narrators, alias_map),
                 "text": spoken,
                 "language": detect_language_name(spoken),
                 "emotion": emotion,
@@ -385,6 +511,10 @@ def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai
     if pls_path:
         out.append(f'<lexicon uri="{escape_xml_text(pls_path)}" />')
     for row_idx, row in enumerate(parsed):
+        validated_speaker = safe_voice_name(row["speaker"], narrators, alias_map)
+        if validated_speaker != row["speaker"]:
+            print(f"Warning: invalid voice name replaced with Kertoja: {row['speaker']}", file=sys.stderr)
+        row["speaker"] = validated_speaker
         prefix = '<audio src="notification.mp3" /> ' if row["is_chat"] == "1" else ""
         pace, tone = infer_pace_and_tone(row["emotion"], row["is_chat"] == "1")
         chunks = split_plain_text(row["text"], MAX_FRAGMENT_LEN)
