@@ -315,6 +315,9 @@ def annotate_with_openai(lines: list[dict[str, str]], model: str) -> list[dict[s
         return lines
     client = OpenAI()
     payload = [{"speaker": x["speaker"], "text": x["text"], "is_chat": x["is_chat"]} for x in lines]
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    payload_bytes = len(payload_json.encode("utf-8"))
+    print(f"OpenAI API payload-koko: {payload_bytes} tavua ({len(payload_json)} merkkiä), rivejä: {len(payload)}")
     prompt = (
         "Analyze each dialogue line and return a JSON array in the same order. "
         "Fields: language (e.g. finnish/english/spanish), emotion (1-2 words, English), cleaned_text "
@@ -322,7 +325,7 @@ def annotate_with_openai(lines: list[dict[str, str]], model: str) -> list[dict[s
     )
     rsp = client.responses.create(
         model=model,
-        input=[{"role": "system", "content": prompt}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+        input=[{"role": "system", "content": prompt}, {"role": "user", "content": payload_json}],
     )
     content = rsp.output_text
     try:
@@ -398,6 +401,23 @@ def to_ssml_lines(text: str, narrators: dict[str, str], pls_path: str | None, ai
     return out
 
 
+def resolve_output_path(output_arg: str | None, act_no: int, chapter_no: int, chapter_title: str) -> Path:
+    safe_title = re.sub(r"[^A-Za-z0-9ÅÄÖåäö_-]+", "_", chapter_title).strip("_") or "luku"
+    filename = f"{act_no:02d}_{chapter_no:02d}_{safe_title}.ssml"
+    if not output_arg:
+        return Path(filename)
+
+    out = Path(output_arg).expanduser()
+    if output_arg.endswith(("/", "\\")) or (out.exists() and out.is_dir()):
+        out.mkdir(parents=True, exist_ok=True)
+        return out / filename
+    if out.suffix == "":
+        out.mkdir(parents=True, exist_ok=True)
+        return out / filename
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
     parser.add_argument("--input", required=True, help="Syöte .docx")
@@ -415,6 +435,10 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+
+    print("Aloitetaan ääni-käsikirjoituksen muodostus parametreilla:")
+    print(json.dumps(vars(args), ensure_ascii=False, indent=2))
+    print("Parametrit OK, jatketaan käsittelyyn...")
 
     try:
         narrators = load_narrators(Path(args.narrators_file))
@@ -435,9 +459,7 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    safe_title = re.sub(r"[^A-Za-z0-9ÅÄÖåäö_-]+", "_", chapter_title).strip("_") or "luku"
-    default_name = f"{act_no:02d}_{chapter_no:02d}_{safe_title}.txt"
-    output = Path(args.output) if args.output else Path(default_name)
+    output = resolve_output_path(args.output, act_no, chapter_no, chapter_title)
     output.write_text(normalized, encoding="utf-8")
     print(f"Kirjoitettu: {output}")
     return 0

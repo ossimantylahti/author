@@ -15,6 +15,8 @@ import shutil
 import random
 from typing import Any
 
+from openai import OpenAI
+
 API_BASE = "https://api.elevenlabs.io/v1"
 OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
@@ -259,7 +261,7 @@ def ensure_ffmpeg_installed() -> None:
 
 
 def ensure_renderer_installed(renderer: str) -> None:
-    if renderer == "elevenlabs":
+    if renderer in {"elevenlabs", "openai"}:
         return
     binary = "piper" if renderer == "piper" else "kokoro-tts"
     if shutil.which(binary):
@@ -293,6 +295,21 @@ def ensure_piper_voice_available(voice_id: str) -> str:
 
 
 def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path) -> str:
+    if renderer == "openai":
+        client = OpenAI()
+        clean_text = strip_ssml_tags(text)
+        if not clean_text:
+            return voice_id
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice=voice_id,
+            input=clean_text,
+            format="mp3",
+        ) as response:
+            response.stream_to_file(out_path)
+        return voice_id
+
     if renderer == "piper":
         cmd = ["piper", "--model", voice_id, "--output_file", str(out_path)]
         proc = subprocess.run(cmd, input=strip_ssml_tags(text), text=True, capture_output=True)
@@ -443,7 +460,7 @@ def main() -> int:
     parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto, johon luodaan parts/ ja mahdollinen yhdistetty mp3")
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
     parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
-    parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro"], default="piper")
+    parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper")
     parser.add_argument("--voice-name", default="Kertoja")
     parser.add_argument("--voice-id", default=None)
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
@@ -485,7 +502,10 @@ def main() -> int:
     model_id = args.model_id or MODEL_MAP[args.model]
     chunks = split_ssml_chunks(content, args.chunk_limit)
     print(f"Voice: {args.voice_name} -> {voice_id}")
-    print(f"Model: {args.model} ({model_id})")
+    if args.renderer == "elevenlabs":
+        print(f"Model: {args.model} ({model_id})")
+    elif args.renderer == "openai":
+        print("Model: gpt-4o-mini-tts")
     print(f"Chunkit: {len(chunks)} kpl")
     if pronunciation_locators:
         print(f"Ääntämissanastoja: {len(pronunciation_locators)} kpl")
@@ -494,6 +514,10 @@ def main() -> int:
         return 0
 
     api_key = ""
+    if args.renderer == "openai" and not os.getenv("OPENAI_API_KEY"):
+        print("Virhe: OPENAI_API_KEY puuttuu ympäristöstä.", file=sys.stderr)
+        return 2
+
     if args.renderer == "elevenlabs":
         api_key = os.getenv("ELEVENLABS_API_KEY")
         if not api_key:
