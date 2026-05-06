@@ -14,6 +14,7 @@ from urllib import error, request
 import shutil
 import random
 from typing import Any
+from xml.sax.saxutils import escape
 
 from openai import OpenAI
 
@@ -23,6 +24,7 @@ DEFAULT_AUDIO_FORMAT = "mp3"
 MAX_RENDERER_CHUNK_LIMIT = 4000
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
 DEFAULT_PRONUNCIATION_FILE = "prompt_pronunciation.txt"
+DEFAULT_PRONUNCIATION_DICTIONARY = "pronunciation_dictionary.json"
 MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = MAX_RENDERER_CHUNK_LIMIT
 NARRATOR_NAME = "Kertoja"
@@ -64,6 +66,89 @@ def load_pronunciation_locators(path: Path) -> list[dict[str, str]]:
             raise ValueError("Ääntämisohjeesta puuttuu pronunciation_dictionary_id tai version_id.")
         cleaned.append({"pronunciation_dictionary_id": dict_id, "version_id": version_id})
     return cleaned
+
+
+def load_pronunciation_dictionary(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("pronunciation_dictionary.json pitää olla JSON-objekti.")
+    if not isinstance(data.get("entries"), list):
+        raise ValueError("pronunciation_dictionary.json: entries pitää olla lista.")
+    return data
+
+
+def build_pronunciation_map(dictionary: dict[str, Any], language: str) -> list[tuple[re.Pattern[str], str, str]]:
+    replacements: list[tuple[str, str]] = []
+    for entry in dictionary.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        graphemes = entry.get("graphemes", [])
+        pronunciations = entry.get("pronunciations", {})
+        lang_data = pronunciations.get(language, {}) if isinstance(pronunciations, dict) else {}
+        if not isinstance(graphemes, list) or not isinstance(lang_data, dict):
+            continue
+        replacement = lang_data.get("alias") or lang_data.get("spoken")
+        if not isinstance(replacement, str) or not replacement.strip():
+            continue
+        for g in graphemes:
+            if isinstance(g, str) and g.strip():
+                replacements.append((g.strip(), replacement.strip()))
+    replacements.sort(key=lambda x: len(x[0]), reverse=True)
+    patterns: list[tuple[re.Pattern[str], str, str]] = []
+    for term, repl in replacements:
+        if term.startswith("#") or term.startswith("@"):
+            regex = re.compile(rf"(?<![\w]){re.escape(term)}(?![\w])")
+        else:
+            regex = re.compile(rf"(?<![\w@#]){re.escape(term)}(?![\w])")
+        patterns.append((regex, repl, term))
+    return patterns
+
+
+def apply_pronunciation_aliases(text: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]]) -> str:
+    updated = text
+    for pattern, replacement, _ in pronunciation_map:
+        updated = pattern.sub(replacement, updated)
+    return updated
+
+
+def export_pls(dictionary: dict[str, Any], language: str, out_path: Path) -> None:
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<lexicon version="1.0" xmlns="http://www.w3.org/2005/01/pronunciation-lexicon" alphabet="ipa" xml:lang="{escape(language)}">',
+    ]
+    for entry in dictionary.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        graphemes = entry.get("graphemes", [])
+        pronunciations = entry.get("pronunciations", {})
+        lang_data = pronunciations.get(language, {}) if isinstance(pronunciations, dict) else {}
+        if not isinstance(graphemes, list) or not isinstance(lang_data, dict):
+            continue
+        ipa = lang_data.get("ipa")
+        alias = lang_data.get("alias")
+        if not isinstance(ipa, str) and not isinstance(alias, str):
+            continue
+        lines.append("  <lexeme>")
+        for g in graphemes:
+            if isinstance(g, str) and g.strip():
+                lines.append(f"    <grapheme>{escape(g.strip())}</grapheme>")
+        if isinstance(ipa, str):
+            lines.append(f"    <phoneme>{escape(ipa.strip())}</phoneme>")
+        else:
+            lines.append(f"    <alias>{escape(str(alias).strip())}</alias>")
+        lines.append("  </lexeme>")
+    lines.append("</lexicon>")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def export_all_pls(dictionary: dict[str, Any], out_dir: Path) -> list[Path]:
+    out_paths: list[Path] = []
+    for language in dictionary.get("default_languages", ["fi-FI", "en-GB", "en-US", "es-MX"]):
+        p = out_dir / f"pronunciation_dictionary.{language}.pls"
+        export_pls(dictionary, language, p)
+        out_paths.append(p)
+    return out_paths
 
 
 def strip_speak_wrappers(text: str) -> str:
@@ -308,13 +393,14 @@ def ensure_piper_voice_available(voice_id: str) -> str:
     )
 
 
-def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str) -> str:
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None) -> str:
     if renderer == "openai":
         client = OpenAI()
         ssml_voice, ssml_model, ssml_instructions = extract_openai_ssml_options(text)
         resolved_voice = ssml_voice or voice_id
         resolved_model = ssml_model or "gpt-4o-mini-tts"
-        clean_text = strip_ssml_tags(text)
+        rewritten = apply_pronunciation_aliases(text, pronunciation_map or [])
+        clean_text = strip_ssml_tags(rewritten)
         if not clean_text:
             return resolved_voice
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -324,13 +410,14 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
             "input": clean_text,
             "response_format": audio_format,
         }
-        if ssml_instructions:
-            payload["instructions"] = ssml_instructions
+        instruction_suffix = "Pronounce Finnish names and words with Finnish pronunciation, English names in English, and Mexican Spanish words in Mexican Spanish. Respect the provided rewritten spoken forms."
+        payload["instructions"] = f"{(ssml_instructions or '').strip()} {instruction_suffix}".strip()
         with client.audio.speech.with_streaming_response.create(**payload) as response:
             response.stream_to_file(out_path)
         return resolved_voice
 
     if renderer == "piper":
+        text = apply_pronunciation_aliases(text, pronunciation_map or [])
         cmd = ["piper", "--model", voice_id, "--output_file", str(out_path)]
         proc = subprocess.run(cmd, input=strip_ssml_tags(text), text=True, capture_output=True)
         if proc.returncode == 0:
@@ -344,6 +431,7 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
             raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{resolved_voice}': {retry.stderr.strip() or retry.stdout.strip()}")
         raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
 
+    text = apply_pronunciation_aliases(text, pronunciation_map or [])
     proc = subprocess.run(["kokoro-tts", "--voice", voice_id, "--output", str(out_path), strip_ssml_tags(text)], text=True, capture_output=True)
     if proc.returncode != 0:
         raise RuntimeError(f"Kokoro-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
@@ -480,6 +568,10 @@ def main() -> int:
     parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto, johon luodaan parts/ ja mahdollinen yhdistetty mp3")
     parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
     parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
+    parser.add_argument("--pronunciation-dictionary", default=None)
+    parser.add_argument("--language", default="en-GB")
+    parser.add_argument("--generate-pls", action="store_true")
+    parser.add_argument("--pls-out-dir", default="pronunciation_exports")
     parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper")
     parser.add_argument("--voice-name", default="Kertoja")
     parser.add_argument("--voice-id", default=None)
@@ -499,6 +591,15 @@ def main() -> int:
     content = Path(args.input_file).read_text(encoding="utf-8").strip()
     narrators = load_narrators(Path(args.narrators_file))
     pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
+    pronunciation_dictionary = None
+    pronunciation_map: list[tuple[re.Pattern[str], str, str]] = []
+    dictionary_path = Path(args.pronunciation_dictionary) if args.pronunciation_dictionary else None
+    if dictionary_path and dictionary_path.exists():
+        pronunciation_dictionary = load_pronunciation_dictionary(dictionary_path)
+        pronunciation_map = build_pronunciation_map(pronunciation_dictionary, args.language)
+    elif args.pronunciation_dictionary:
+        print(f"Virhe: pronunciation dictionaryä ei löydy: {args.pronunciation_dictionary}", file=sys.stderr)
+        return 2
     try:
         ensure_renderer_installed(args.renderer)
         ensure_ffmpeg_installed()
@@ -531,6 +632,22 @@ def main() -> int:
     print(f"Chunkit: {len(chunks)} kpl")
     if pronunciation_locators:
         print(f"Ääntämissanastoja: {len(pronunciation_locators)} kpl")
+    print(f"Kieli: {args.language}")
+    print(f"Pronunciation-entryjä: {len(pronunciation_map)}")
+    if pronunciation_map:
+        preview = [f"{term} -> {repl}" for _, repl, term in pronunciation_map[:20]]
+        print(f"Aktiiviset replacementit (max20): {preview}")
+    if pronunciation_locators:
+        print(f"ElevenLabs locatorit: {pronunciation_locators}")
+
+    if args.generate_pls:
+        if not pronunciation_dictionary:
+            print("Virhe: --generate-pls vaatii --pronunciation-dictionary", file=sys.stderr)
+            return 2
+        generated = export_all_pls(pronunciation_dictionary, Path(args.pls_out_dir))
+        print("Generoitu PLS-tiedostot:")
+        for gp in generated:
+            print(f"- {gp}")
 
     if args.dry_run:
         return 0
@@ -574,7 +691,7 @@ def main() -> int:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -640,7 +757,7 @@ def main() -> int:
                         if not clean_text:
                             continue
                         print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker}")
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path, args.format)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path, args.format, pronunciation_map)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
