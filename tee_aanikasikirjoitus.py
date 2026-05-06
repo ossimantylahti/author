@@ -64,6 +64,15 @@ class NarratorConfig:
     aliases: dict[str, str]
 
 
+@dataclass
+class ScriptSegment:
+    segment_id: int
+    type: str  # "narration" | "dialogue"
+    speaker: str
+    text: str
+    confidence: float = 1.0
+
+
 def normalise_alias_key(value: str) -> str:
     value = value.strip().lower().replace("0", "o")
     return re.sub(r"[^a-zåäöáéíóúüñ0-9]+", "", value, flags=re.IGNORECASE)
@@ -242,49 +251,110 @@ def split_plain_text(text: str, limit: int = MAX_FRAGMENT_LEN) -> list[str]:
         parts.append(rem[:cut].strip()); rem=rem[cut:].strip()
     return [p for p in parts if p]
 
-def parse_script_lines(text: str, narrators: dict[str, str], alias_map: dict[str, str]) -> list[dict[str, str]]:
-    parsed=[]
+def _longest_alias_prefix(line: str, alias_map: dict[str, str]) -> str | None:
+    stripped = line.strip()
+    best: str | None = None
+    best_len = 0
+    for alias_key, canonical in alias_map.items():
+        alias_words = [w for w in re.split(r"[^A-Za-zÅÄÖåäö0-9]+", alias_key) if w]
+        if not alias_words:
+            continue
+        alias_text = " ".join(alias_words)
+        if stripped.lower().startswith(alias_text.lower()) and len(alias_text) > best_len:
+            best = canonical
+            best_len = len(alias_text)
+    return best
+
+
+def attribute_speakers_rule_based(text: str, narrators: dict[str, str], alias_map: dict[str, str], debug: bool = False) -> list[ScriptSegment]:
+    parsed: list[ScriptSegment] = []
     state={"current_scene_subject":NARRATOR_NAME,"last_explicit_speaker":NARRATOR_NAME,"last_dialogue_speaker":NARRATOR_NAME,"pending_speaker_from_lead_in":NARRATOR_NAME}
     speech_pat = "|".join(sorted(SPEECH_VERBS, key=len, reverse=True))
-    for raw in text.splitlines():
+    for idx, raw in enumerate(text.splitlines(), start=1):
         line=raw.strip()
         if not line: continue
-        speaker=NARRATOR_NAME; spoken=line
+        speaker=NARRATOR_NAME; spoken=line; seg_type="narration"
         m = re.match(r"^([^:]{1,64}):\s*(.*)$", line)
         if m:
-            cand=m.group(1).strip(); resolved=resolve_voice_name(cand,narrators,alias_map)
+            cand=m.group(1).strip(); resolved=resolve_voice_name(cand,narrators,alias_map); seg_type="dialogue"
             if resolved!=NARRATOR_NAME: speaker,spoken=resolved,m.group(2).strip()
         elif line.startswith("–") or line.startswith("“"):
-            spoken=line.lstrip("–“").strip(); speaker=state["pending_speaker_from_lead_in"]
+            seg_type="dialogue"; spoken=line.lstrip("–“").strip(); speaker=state["pending_speaker_from_lead_in"]
             end = re.search(rf",\s*([A-ZÅÄÖa-zåäö][^,.:;!?]{{0,40}})\s+({speech_pat})\b", spoken, re.IGNORECASE)
-            if end: speaker = resolve_voice_name(end.group(1), narrators, alias_map)
+            if end:
+                tag_speaker = resolve_voice_name(end.group(1), narrators, alias_map)
+                speaker = tag_speaker if tag_speaker != NARRATOR_NAME else speaker
+                spoken = re.sub(rf",\s*[A-ZÅÄÖa-zåäö][^,.:;!?]{{0,40}}\s+({speech_pat})\b.*$", "", spoken, flags=re.IGNORECASE).strip()
             elif re.search(rf"\bhän\s+({speech_pat})\b", spoken, re.IGNORECASE) and state["last_explicit_speaker"] != NARRATOR_NAME:
                 speaker = state["last_explicit_speaker"]
             if speaker == NARRATOR_NAME:
                 speaker = state["last_dialogue_speaker"] if state["last_dialogue_speaker"] != NARRATOR_NAME else NARRATOR_NAME
         else:
-            lead = re.search(rf"^([A-ZÅÄÖa-zåäö][^,:]{{0,48}}).{{0,120}}\b({speech_pat})\b.*:\s*$", line, re.IGNORECASE)
+            lead = re.search(rf"^([A-ZÅÄÖa-zåäö][^:]]{{0,160}})\b({speech_pat})\b.*:\s*$", line, re.IGNORECASE)
             if lead:
-                state["pending_speaker_from_lead_in"] = resolve_voice_name(lead.group(1), narrators, alias_map)
+                prefix_match = _longest_alias_prefix(line, alias_map)
+                if prefix_match:
+                    state["pending_speaker_from_lead_in"] = prefix_match
+                else:
+                    first_token = re.match(r"^([A-ZÅÄÖa-zåäö][A-Za-zÅÄÖåäö-]{1,40})", line)
+                    state["pending_speaker_from_lead_in"] = resolve_voice_name(first_token.group(1) if first_token else lead.group(1), narrators, alias_map)
             else:
                 state["pending_speaker_from_lead_in"] = NARRATOR_NAME
         if speaker != NARRATOR_NAME:
             state["last_explicit_speaker"] = speaker; state["last_dialogue_speaker"] = speaker; state["current_scene_subject"] = speaker
-        parsed.append({"speaker": speaker, "text": spoken})
+        segment = ScriptSegment(segment_id=idx, type=seg_type, speaker=speaker, text=spoken, confidence=1.0)
+        if debug:
+            conf = f" confidence={segment.confidence:.2f}" if segment.type == "dialogue" else ""
+            print(f"[{segment.type}] speaker={segment.speaker}{conf} text={segment.text!r}")
+        parsed.append(segment)
     return parsed
 
-def to_ssml_lines(text: str, narrators: dict[str, str], alias_map: dict[str, str]) -> list[str]:
-    parsed = parse_script_lines(text, narrators, alias_map)
+
+def attribute_speakers_with_openai(text: str, narrators: dict[str, str], alias_map: dict[str, str], model: str = "gpt-4.1-mini", debug: bool = False) -> list[ScriptSegment]:
+    client = OpenAI()
+    segments = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    payload = [{"segment_id": i + 1, "text": s} for i, s in enumerate(segments)]
+    narrator_names = ", ".join(narrators.keys())
+    prompt = (
+        "This is a Finnish novel script. En dash dialogue lines are dialogue. "
+        "Dialogue tags such as 'hän sanoi', 'Virtanen vastasi', and 'vaimo huikkasi keittiöstä' are not spoken text. "
+        "Infer speaker from the same line and nearby context. "
+        f"Use only these narrator names or aliases: {narrator_names}. "
+        f"If unclear, use {NARRATOR_NAME}. Return JSON array with fields segment_id,type,speaker,text,confidence."
+    )
+    res = client.responses.create(model=model, input=[{"role": "system", "content": prompt}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}])
+    text_out = res.output_text.strip()
+    data = json.loads(text_out)
+    out: list[ScriptSegment] = []
+    for row in data:
+        raw_speaker = str(row.get("speaker", NARRATOR_NAME))
+        resolved = resolve_voice_name(raw_speaker, narrators, alias_map)
+        if resolved == NARRATOR_NAME and raw_speaker.strip() and normalise_alias_key(raw_speaker) != normalise_alias_key(NARRATOR_NAME):
+            print(f'WARNING: Speaker "{raw_speaker}" was detected but no matching narrator was found. Falling back to {NARRATOR_NAME}.', file=sys.stderr)
+        seg = ScriptSegment(
+            segment_id=int(row["segment_id"]),
+            type="dialogue" if row.get("type") == "dialogue" else "narration",
+            speaker=resolved,
+            text=str(row.get("text", "")),
+            confidence=float(row.get("confidence", 1.0)),
+        )
+        if debug:
+            conf = f" confidence={seg.confidence:.2f}" if seg.type == "dialogue" else ""
+            print(f"[{seg.type}] speaker={seg.speaker}{conf} text={seg.text!r}")
+        out.append(seg)
+    return out
+
+def to_ssml_lines(segments: list[ScriptSegment], narrators: dict[str, str], alias_map: dict[str, str]) -> list[str]:
     out=[]
-    for i,row in enumerate(parsed):
-        speaker=resolve_voice_name(row["speaker"], narrators, alias_map)
-        emojis=EMOJI_RE.findall(row["text"]); spoken=EMOJI_RE.sub("",row["text"]).strip()
+    for i,row in enumerate(segments):
+        speaker=resolve_voice_name(row.speaker, narrators, alias_map)
+        emojis=EMOJI_RE.findall(row.text); spoken=EMOJI_RE.sub("",row.text).strip()
         is_chat=speaker.startswith("chat")
-        emotion=infer_chat_emotion(row["text"],emojis) if is_chat else "neutraali"
+        emotion=infer_chat_emotion(row.text,emojis) if is_chat else "neutraali"
         pace,tone=infer_pace_and_tone(emotion,is_chat)
         for chunk in split_plain_text(spoken):
             out.append(f'<voice name="{html.escape(speaker)}" language="{detect_language_name(chunk)}" emotion="{emotion}" pace="{pace}" tone="{tone}">{html.escape(chunk)}</voice>')
-        if i < len(parsed)-1: out.append(f'<break time="{INTER_LINE_BREAK}"/>')
+        if i < len(segments)-1: out.append(f'<break time="{INTER_LINE_BREAK}"/>')
     return out
 
 def final_voice_gate(ssml: str, narrators: dict[str, str]) -> str:
@@ -307,9 +377,15 @@ def normalise_content_for_filename(content: str | None) -> str:
     return cleaned or "output"
 
 
-def resolve_output_path(output_arg: str | None, content: str | None, input_path: Path) -> Path:
+def slugify_filename_part(value: str | None) -> str:
+    cleaned = re.sub(r"[^0-9A-Za-zÅÄÖåäö_-]+", "_", (value or "").strip()).strip("_").lower()
+    return cleaned or "audiobook"
+
+
+def resolve_output_path(output_arg: str | None, content: str | None, input_path: Path, chapter_title: str | None = None) -> Path:
     name_root = normalise_content_for_filename(content)
-    auto_file_name = f"{name_root}_audiobook_ssml.xml"
+    title_slug = slugify_filename_part(chapter_title) if chapter_title else "audiobook"
+    auto_file_name = f"{name_root}_{title_slug}_ssml.xml"
     if not output_arg:
         return Path(auto_file_name)
 
@@ -331,15 +407,28 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
     parser.add_argument("--input", required=True); parser.add_argument("--content", required=False)
     parser.add_argument("--output", default=None); parser.add_argument("--narrators-file", default="prompt_narrators.txt")
+    parser.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai")
+    parser.add_argument("--debug-speakers", action="store_true")
+    parser.add_argument("--openai-model", default="gpt-4.1-mini")
     args = parser.parse_args()
     try:
         cfg=load_narrator_config(Path(args.narrators_file))
         section,act_no,chapter_no,title=extract_section(Path(args.input), args.content)
     except Exception as e:
         print(f"Virhe: {e}", file=sys.stderr); return 2
-    ssml = "<speak>\n" + "\n".join(to_ssml_lines(section, cfg.voices, cfg.aliases)) + "\n</speak>\n"
+    print(f"Detected chapter title: {title}")
+    print(f"Speaker detection mode: {args.speaker_detection}")
+    if args.speaker_detection == "openai":
+        try:
+            segments = attribute_speakers_with_openai(section, cfg.voices, cfg.aliases, model=args.openai_model, debug=args.debug_speakers)
+        except Exception as e:
+            print(f"WARNING: OpenAI speaker attribution failed: {e}. Falling back to rule-based speaker detection.", file=sys.stderr)
+            segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
+    else:
+        segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
+    ssml = "<speak>\n" + "\n".join(to_ssml_lines(segments, cfg.voices, cfg.aliases)) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
-    out = resolve_output_path(args.output, args.content, Path(args.input))
+    out = resolve_output_path(args.output, args.content, Path(args.input), title)
     print(f"Writing SSML to: {out}")
     out.write_text(ssml, encoding="utf-8")
     print(f"Kirjoitettu: {out}")
