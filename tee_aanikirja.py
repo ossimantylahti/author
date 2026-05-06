@@ -167,8 +167,20 @@ def split_voice_segment(segment_text: str, chunk_limit: int) -> list[str]:
     if not m:
         return split_large_text(segment_text, chunk_limit)
 
+    attrs = m.group(1).strip()
     inner = m.group(2).strip()
-    return [part for part in split_large_text(inner, chunk_limit) if part.strip()]
+    return [f"<voice {attrs}>{part}</voice>" for part in split_large_text(inner, chunk_limit) if part.strip()]
+
+
+def extract_openai_ssml_options(text: str) -> tuple[str | None, str | None, str | None]:
+    m = re.search(r"<voice\s+([^>]*)>", text, flags=re.IGNORECASE)
+    if not m:
+        return None, None, None
+    attrs = m.group(1)
+    def read_attr(name: str) -> str | None:
+        match = re.search(rf'{name}="([^"]*)"', attrs, flags=re.IGNORECASE)
+        return match.group(1).strip() if match else None
+    return read_attr("openai_voice"), read_attr("openai_model"), read_attr("openai_instructions")
 
 
 def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
@@ -299,18 +311,24 @@ def ensure_piper_voice_available(voice_id: str) -> str:
 def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str) -> str:
     if renderer == "openai":
         client = OpenAI()
+        ssml_voice, ssml_model, ssml_instructions = extract_openai_ssml_options(text)
+        resolved_voice = ssml_voice or voice_id
+        resolved_model = ssml_model or "gpt-4o-mini-tts"
         clean_text = strip_ssml_tags(text)
         if not clean_text:
-            return voice_id
+            return resolved_voice
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice=voice_id,
-            input=clean_text,
-            response_format=audio_format,
-        ) as response:
+        payload = {
+            "model": resolved_model,
+            "voice": resolved_voice,
+            "input": clean_text,
+            "response_format": audio_format,
+        }
+        if ssml_instructions:
+            payload["instructions"] = ssml_instructions
+        with client.audio.speech.with_streaming_response.create(**payload) as response:
             response.stream_to_file(out_path)
-        return voice_id
+        return resolved_voice
 
     if renderer == "piper":
         cmd = ["piper", "--model", voice_id, "--output_file", str(out_path)]
