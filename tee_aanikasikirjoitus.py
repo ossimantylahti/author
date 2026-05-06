@@ -59,9 +59,18 @@ def _build_speech_verbs() -> set[str]:
 SPEECH_VERBS = _build_speech_verbs()
 
 @dataclass
+class OpenAIProfile:
+    profile_id: str
+    voice: str
+    model: str
+    instructions: str
+
+
+@dataclass
 class NarratorConfig:
     voices: dict[str, str]
     aliases: dict[str, str]
+    openai_profiles: dict[str, dict[str, OpenAIProfile]]
 
 
 @dataclass
@@ -102,6 +111,7 @@ def load_narrator_config(path: Path) -> NarratorConfig:
         raise ValueError("Narrators-tiedoston 'voices' pitää olla objekti")
 
     voices: dict[str, str] = {}
+    openai_profiles: dict[str, dict[str, OpenAIProfile]] = {}
     for name, meta in voices_raw.items():
         if not isinstance(meta, dict):
             raise ValueError(f"Voice-entry '{name}' on virheellinen: pitää olla objekti")
@@ -111,7 +121,36 @@ def load_narrator_config(path: Path) -> NarratorConfig:
         eleven = ids.get("elevenlabs")
         if not eleven:
             raise ValueError(f"Voice-entry '{name}' on virheellinen: ids.elevenlabs puuttuu")
-        voices[str(name)] = str(eleven)
+        narrator_name = str(name)
+        voices[narrator_name] = str(eleven)
+        raw_profiles = meta.get("openai_profiles")
+        if raw_profiles is None:
+            continue
+        if not isinstance(raw_profiles, dict):
+            raise ValueError(f"Voice-entry '{name}' on virheellinen: 'openai_profiles' pitää olla objekti")
+        speaker_profiles: dict[str, OpenAIProfile] = {}
+        for language_key, profile_meta in raw_profiles.items():
+            if not isinstance(profile_meta, dict):
+                raise ValueError(f"Voice-entry '{name}' profile '{language_key}' on virheellinen: pitää olla objekti")
+            voice = str(profile_meta.get("voice", "")).strip()
+            if not voice:
+                raise ValueError(f"Voice-entry '{name}' profile '{language_key}' on virheellinen: 'voice' puuttuu")
+            profile_id = str(profile_meta.get("profile_id", "")).strip() or f"{normalise_alias_key(narrator_name)}-{voice}-{language_key}"
+            instructions_raw = profile_meta.get("instructions")
+            if instructions_raw is None:
+                print(f"Warning: OpenAI instructions missing for {narrator_name}/{language_key}; using empty instructions.", file=sys.stderr)
+                instructions = ""
+            else:
+                instructions = str(instructions_raw)
+            model = str(profile_meta.get("model", "gpt-4o-mini-tts")).strip() or "gpt-4o-mini-tts"
+            speaker_profiles[str(language_key)] = OpenAIProfile(
+                profile_id=profile_id,
+                voice=voice,
+                model=model,
+                instructions=instructions,
+            )
+        if speaker_profiles:
+            openai_profiles[narrator_name] = speaker_profiles
 
     if NARRATOR_NAME not in voices:
         raise ValueError(f"Narrators-tiedostossa pitää olla '{NARRATOR_NAME}'")
@@ -132,7 +171,53 @@ def load_narrator_config(path: Path) -> NarratorConfig:
             for alias in values:
                 if isinstance(alias, str) and alias.strip():
                     alias_map[normalise_alias_key(alias)] = canonical_name
-    return NarratorConfig(voices=voices, aliases=alias_map)
+    return NarratorConfig(voices=voices, aliases=alias_map, openai_profiles=openai_profiles)
+
+
+def normalise_language_key(language_name: str) -> str:
+    key = (language_name or "").strip().lower()
+    aliases = {
+        "finnish": "fi",
+        "suomi": "fi",
+        "fi": "fi",
+        "english": "en",
+        "en": "en",
+        "spanish": "es",
+        "espanol": "es",
+        "español": "es",
+        "es": "es",
+    }
+    return aliases.get(key, key)
+
+
+def resolve_openai_profile(
+    speaker: str,
+    language_name: str,
+    cfg: NarratorConfig,
+    variant: str | None = None,
+) -> OpenAIProfile | None:
+    speaker_profiles = cfg.openai_profiles.get(speaker, {})
+    lang_key = normalise_language_key(language_name)
+    variant_key = (variant or "").strip().lower()
+    candidate_keys: list[str] = []
+    if variant_key:
+        candidate_keys.append(f"{lang_key}_{variant_key}")
+    candidate_keys.append(lang_key)
+    legacy_key = {"fi": "finnish", "en": "english", "es": "spanish"}.get(lang_key)
+    if legacy_key:
+        candidate_keys.append(legacy_key)
+    for key in candidate_keys:
+        if key in speaker_profiles:
+            return speaker_profiles[key]
+    if speaker_profiles:
+        return next(iter(speaker_profiles.values()))
+    narrator_profiles = cfg.openai_profiles.get(NARRATOR_NAME, {})
+    for key in candidate_keys:
+        if key in narrator_profiles:
+            return narrator_profiles[key]
+    if narrator_profiles:
+        return next(iter(narrator_profiles.values()))
+    return None
 
 
 def build_alias_map(narrators: dict[str, str]) -> dict[str, str]:
@@ -404,16 +489,38 @@ def attribute_speakers_with_openai(text: str, narrators: dict[str, str], alias_m
         out.append(seg)
     return out
 
-def to_ssml_lines(segments: list[ScriptSegment], narrators: dict[str, str], alias_map: dict[str, str]) -> list[str]:
+def to_ssml_lines(
+    segments: list[ScriptSegment],
+    cfg: NarratorConfig,
+    openai_profile_variant: str | None = None,
+) -> list[str]:
     out=[]
     for i,row in enumerate(segments):
-        speaker=resolve_voice_name(row.speaker, narrators, alias_map)
+        speaker=resolve_voice_name(row.speaker, cfg.voices, cfg.aliases)
         emojis=EMOJI_RE.findall(row.text); spoken=EMOJI_RE.sub("",row.text).strip()
         is_chat=speaker.startswith("chat")
         emotion=infer_chat_emotion(row.text,emojis) if is_chat else "neutraali"
         pace,tone=infer_pace_and_tone(emotion,is_chat)
         for chunk in split_plain_text(spoken):
-            out.append(f'<voice name="{html.escape(speaker)}" language="{detect_language_name(chunk)}" emotion="{emotion}" pace="{pace}" tone="{tone}">{html.escape(chunk)}</voice>')
+            language = detect_language_name(chunk)
+            profile = resolve_openai_profile(speaker, language, cfg, variant=openai_profile_variant)
+            attrs = [
+                f'name="{html.escape(speaker, quote=True)}"',
+                f'language="{html.escape(language, quote=True)}"',
+                f'emotion="{html.escape(emotion, quote=True)}"',
+                f'pace="{html.escape(pace, quote=True)}"',
+                f'tone="{html.escape(tone, quote=True)}"',
+            ]
+            if profile:
+                attrs.extend(
+                    [
+                        f'openai_profile="{html.escape(profile.profile_id, quote=True)}"',
+                        f'openai_voice="{html.escape(profile.voice, quote=True)}"',
+                        f'openai_model="{html.escape(profile.model, quote=True)}"',
+                        f'openai_instructions="{html.escape(profile.instructions, quote=True)}"',
+                    ]
+                )
+            out.append(f'<voice {" ".join(attrs)}>{html.escape(chunk)}</voice>')
         if i < len(segments)-1: out.append(f'<break time="{INTER_LINE_BREAK}"/>')
     return out
 
@@ -423,7 +530,7 @@ def final_voice_gate(ssml: str, narrators: dict[str, str]) -> str:
         if val in narrators: return m.group(0)
         print(f"Warning: invalid voice name replaced with Kertoja: {val}", file=sys.stderr)
         return m.group(0).replace(val, NARRATOR_NAME)
-    return re.sub(r'voice name="([^"]*)"', repl, ssml)
+    return re.sub(r'<voice\s+name="([^"]*)"', repl, ssml)
 
 
 def normalise_content_for_filename(content: str | None) -> str:
@@ -470,6 +577,7 @@ def main() -> int:
     parser.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai")
     parser.add_argument("--debug-speakers", action="store_true")
     parser.add_argument("--openai-model", default="gpt-4.1-mini")
+    parser.add_argument("--openai-profile-variant", default=None)
     args = parser.parse_args()
     try:
         cfg=load_narrator_config(Path(args.narrators_file))
@@ -490,8 +598,13 @@ def main() -> int:
     if args.debug_speakers:
         for segment in segments:
             conf = f" confidence={segment.confidence:.2f}" if segment.type == "dialogue" else ""
-            print(f"[{segment.type}] speaker={segment.speaker}{conf} text={segment.text!r}")
-    ssml = "<speak>\n" + "\n".join(to_ssml_lines(segments, cfg.voices, cfg.aliases)) + "\n</speak>\n"
+            language = detect_language_name(segment.text)
+            profile = resolve_openai_profile(segment.speaker, language, cfg, variant=args.openai_profile_variant)
+            profile_text = profile.profile_id if profile else "-"
+            print(f"[{segment.type}] speaker={segment.speaker} profile={profile_text}{conf} text={segment.text!r}")
+    ssml = "<speak>\n" + "\n".join(
+        to_ssml_lines(segments, cfg, openai_profile_variant=args.openai_profile_variant)
+    ) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
     out = resolve_output_path(args.output, args.content, Path(args.input), title)
     print(f"Writing SSML to: {out}")
