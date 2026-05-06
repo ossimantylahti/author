@@ -1,0 +1,205 @@
+<speak>
+<lexicon uri="/mnt/c/users/ossim/github/om-author/prompt_SSML_multi-voice_audiobook_11lab_v2.txt" />
+<voice name="Kertoja" language="finnish" emotion="neutral" pace="medium" tone="neutral">Kello 19.42</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="tired" pace="medium" tone="neutral">Rikoskomisario Virtanen saapui kotiin vähän ennen iltakahdeksaa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="weary" pace="medium" tone="neutral">Oli satanut koko matkan, ja vesi helmeili vielä takin hartioilla, kun hän potkaisi kengät jaloistaan eteisen matolle.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="exhausted" pace="medium" tone="neutral">Hänen sisällään tuntui pitkä päivä – paperit, raportit, hiljaiset päät. Sellainen päivä, joka ei loppunut, vaikka oli ohi.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="nostalgic" pace="medium" tone="neutral">Keittiöstä kantautui tuoksu, joka soi hänelle pienen ilon pilkahduksen. Voin ja paistetun sipulin makea höyry. Sellainen, joka tarttuu seinäpaneeliin ja lapsuuden muistoihin. Lihapullia ja perunamuusia. Mummon reseptillä. Turvallinen olo. Hyvä ruoka, parempi mieli.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="warm" pace="medium" tone="neutral">– Tulit juuri sopivasti, vaimo huikkasi keittiöstä.</voice>
+<break time="0.8s"/>
+<voice name="Virtanen riisui takkiaan, vastasi äänellä, joka oli väsyneen ja tyytyväisen välimaastossa" language="finnish" emotion="tired content" pace="medium" tone="neutral">Virtanen riisui takkiaan, vastasi äänellä, joka oli väsyneen ja tyytyväisen välimaastossa</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="pleased" pace="medium" tone="neutral">– Aivan kuin olisit lukenut ajatukseni.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="cozy" pace="medium" tone="neutral">kaksi lautasta, maitolasit, puolukkasurvos pienessä astiassa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="soothing" pace="medium" tone="neutral">Höyry nousi muusista, ja lämpö, joka leijui ilmassa, tuntui melkein terapeuttiselta.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="affectionate" pace="medium" tone="neutral">Virtanen halasi vaimoaan takaapäin ja painoi lyhyen suudelman tämän poskelle.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="grateful" pace="medium" tone="neutral">– Kiitos rakas, hän sanoi hiljaa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="neutral" pace="medium" tone="neutral">Kello 19.48</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="satisfied" pace="medium" tone="neutral">Sitten hän istui alas, tarttui haarukkaan ja maistoi ruokaa. Se oli juuri niin hyvää kuin hän oli toivonut.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="content" pace="medium" tone="neutral">Vaimo hymyili kulman takaa, pyyhki käsiään esiliinaan.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="tender" pace="medium" tone="neutral">He koskettivat hetken toistensa käsiä pöydän yli – melkein huomaamatta, mutta tottuneesti.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="playful" pace="medium" tone="neutral">– Näytät siltä kuin olisit saanut palkankorotuksen.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="pleased" pace="medium" tone="neutral">– Tämä on parempaa, Virtanen vastasi.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="relieved" pace="medium" tone="neutral">Hetken ajaksi hän unohti työn.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="uneasy" pace="medium" tone="neutral">Unohti Vuosaaren mudan, sen erikoisen jutun, josta piti tulla “selvä tapaus”, mutta joka oli jättänyt epämääräisen jälkimaun.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="calm" pace="medium" tone="neutral">Hän söi hitaasti, antoi jokaisen suupalan asettua. Pureskeli huolellisesti.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="neutral" pace="medium" tone="neutral">Kello 20.02</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="attentive" pace="medium" tone="neutral">Kun vaimo alkoi kerätä astioita pöydältä, Virtanen nousi ja vilkaisi kelloa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="concerned" pace="medium" tone="neutral">– Missä Eetu on?</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="matter-of-fact" pace="medium" tone="neutral">– Huoneessaan. Pelaa taas varmaan jotain. Mene hakemaan se syömään ennen kuin jäähtyy.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="dutiful" pace="medium" tone="neutral">Virtanen nyökkäsi, pyyhki kätensä keittiöpyyhkeeseen ja lähti käytävälle.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="suspenseful" pace="medium" tone="neutral">Eetun ovi oli raollaan, sisältä kuului kuulokkeiden läpi vuotava ääni – ei räjähdyksiä, ei musiikkia, vaan ihmisen puhetta ja yleisön huminaa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="polite" pace="medium" tone="neutral">Hän koputti.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="urging" pace="medium" tone="neutral">– Ruoka on valmista. Tulehan poika pöytään, ennen kuin se jäähtyy.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="excited" pace="fast" tone="bright">– Odota hetki! Tämä on just alkanut!</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="curious" pace="medium" tone="neutral">Virtanen kurkisti ovesta sisään.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="captivated" pace="medium" tone="neutral">Ruutu hohti sinisenä, ja sen edessä Virtasen poika nojasi tuolillaan eteenpäin, täysin lumoutuneena.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="inquisitive" pace="medium" tone="neutral">– Mikä siellä nyt on noin tärkeää? hän kysyi ja astui lähemmäs.</voice>
+<break time="0.8s"/>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="excited" pace="fast" tone="bright">– Twitch. Tää on se tyyppi, joka löysi ruumiin Vuosaaressa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="startled" pace="medium" tone="neutral">Virtanen pysähtyi.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="confused" pace="medium" tone="neutral">– Minkä tyyppi?</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="matter-of-fact" pace="medium" tone="neutral">– Reacti0n. Tää on sen live.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="alarmed" pace="medium" tone="neutral">Virtanen tunsi jäykistyvänsä. Väsymys katosi kuin nappia painamalla.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="focused" pace="medium" tone="neutral">Hän astui lähemmäs, katse osui ruudulle. Näyttö hehkui, ja kuvan keskelle alkoi hiljalleen tarkentua nuoren miehen hahmo.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="recognition" pace="medium" tone="neutral">Elias Korpela. Sama poika, jota hän oli kuulustellut Pasilassa.</voice>
+<break time="0.8s"/>
+<voice name="Virtanen ehti vetää henkeä, juuri ennen kuin kameraan ilmestynyt hahmo avasi suunsa ja sanoi" language="finnish" emotion="tense" pace="medium" tone="neutral">Virtanen ehti vetää henkeä, juuri ennen kuin kameraan ilmestynyt hahmo avasi suunsa ja sanoi</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="ominous" pace="medium" tone="neutral">– Tämä ei ole peliä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="mesmerized" pace="medium" tone="neutral">Eetu nojautui eteenpäin, silmät sirrillään kuin katsoisi maailmaa ensimmäistä kertaa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="confident" pace="medium" tone="neutral">Kamerassa Elias istui suorana. Hänen kasvoillaan ei ollut enää eilisen kuulusteltua arkuutta, vaan jotain kylmempää ja päättäväistä. Hänestä paistoi itsevarmuus.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="ominous" pace="medium" tone="neutral">Ruudun alalaidassa rullasi tekoälyavusteisen simultaanitulkkauksen käännös. Suoratoisto leviäisi koko maailmaan.</voice>
+<break time="0.8s"/>
+<voice name="Ääni, joka virtasi kaiuttimista, oli hillitty ja kirkas. Esiintyjä toisti" language="finnish" emotion="calm" pace="medium" tone="neutral">Ääni, joka virtasi kaiuttimista, oli hillitty ja kirkas. Esiintyjä toisti</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="ominous" pace="medium" tone="neutral">– Tämä ei ole peliä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="awed" pace="medium" tone="neutral">Eetu vilkaisi isäänsä, suu auki.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="excited" pace="fast" tone="bright">– Faija, tää on ihan sairaan siistii! Se näyttää videota rikospaikalta!</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="shocked" pace="medium" tone="neutral">Virtanen ei vastannut heti. Hänen sisällään liikahti jotain, hidas oivallus, joka jäädytti vatsanpohjan. Hän tunsi sen äänen, tuon rytmin.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="unsettled" pace="medium" tone="neutral">– Tämä on se sama poika, hän sanoi hiljaa. – Mutta nyt hän näyttää aivan eri mieheltä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="absorbed" pace="medium" tone="neutral">Eetu ei kuullut, oli jo täysin kiinni ruudussa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="urgent" pace="medium" tone="neutral">– Kato! Nyt se näyttää sen!</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="tense" pace="medium" tone="neutral">Virtanen astui lähemmäs, tarttui kaiuttimen säätimeen ja lisäsi ääntä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="eerie" pace="medium" tone="neutral">Lähetyksestä kuului hengitystä, metsästä nousevaa sumua ja kengän rahinaa sorassa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="grim" pace="medium" tone="neutral">Kamera liikkui. Pimeä metsä, kalpea valo, heilahdus, sitten maassa makaava hahmo.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="shocked" pace="medium" tone="neutral">Ruumis.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="chilled" pace="medium" tone="neutral">Virtasen niskaa pitkin kulki kylmä väre. Hänen poikansa nielaisi ja nosti kättään tahattomasti suunsa eteen.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="distressed" pace="medium" tone="neutral">Hän oli nähnyt nämä kuvat jo kerran, työpöydän ruudulta, poliisin arkistosta.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="alarmed" pace="medium" tone="neutral">Mutta tämä... tämä oli laajempaa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="disturbing" pace="medium" tone="neutral">Elias kumartui videolla ruumiin viereen.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="tense" pace="medium" tone="neutral">Kuva tärisi, valo heijastui märästä maasta, ja Virtanen tunnisti jokaisen yksityiskohdan, vaikka ne olivatkin maskin peitossa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="uneasy" pace="medium" tone="neutral">Hän tunsi hengityksen, kuuli sen tahdin.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="suspenseful" pace="medium" tone="neutral">Sitten kamera pysähtyi, tarkensi johonkin ruumiin kädessä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="frozen" pace="medium" tone="neutral">Virtanen jähmettyi.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="surprised" pace="medium" tone="neutral">Tätä Elias ei ollut kuulustelussa näyttänyt.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="certain" pace="medium" tone="neutral">Hän tiesi sen heti.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="alarmed" pace="medium" tone="neutral">Ruutu välähti – paperi, tekstiä, saksaa, musta symboli, jonka tunnisti ennen kuin ehti edes lukea.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="shocking" pace="medium" tone="neutral">Kuva kesti vain sekunnin, mutta se riitti.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="shocked" pace="medium" tone="neutral">– Voi jumalauta, Virtanen sanoi hiljaa.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="confused" pace="medium" tone="neutral">Eetu kääntyi, hämmentyneenä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="concerned" pace="medium" tone="neutral">– Mitä se on?</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="fixated" pace="medium" tone="neutral">Virtanen ei irrottanut katsettaan ruudusta.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="urgent" pace="medium" tone="neutral">– Sammuta tuo. Tai älä! Pysäytä siihen kohtaan.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="hesitant" pace="medium" tone="neutral">Eetu painoi näppäimistöllä välilyöntinäppäintä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="alarmed" pace="medium" tone="neutral">ruumiin käsi, paperi, symboli.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="dismayed" pace="medium" tone="neutral">Virtanen astui askeleen lähemmäs, tuijotti ruutua hetken kuin varmistuakseen, ettei nähnyt harhaa. Hän otti askeleen taaksepäin. Sydän hakkasi rinnassa raskaasti, kuin olisi yrittänyt murtautua ulos. Hän huomasi käsiensä hikoilevan.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="concerned" pace="medium" tone="neutral">Eetu katsoi häntä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="anxious" pace="medium" tone="neutral">– Faija? hän kysyi – Onks tää totta?</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="speechless" pace="medium" tone="neutral">Virtanen ei osannut vastata.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="somber" pace="medium" tone="neutral">Paino laskeutui huoneeseen. Se ei ollut enää iltaa, ei arkea – se oli rikos, joka oli muuttunut todeksi heidän olohuoneessaan.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="urgent" pace="medium" tone="neutral">Hän kääntyi ulos Eetun huoneesta ja nappasi puhelimen eteisen kaapilta, sormet hieman täristen. Soitto yhdistyi suoraan päivystykseen.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="urgent" pace="medium" tone="neutral">– Virtanen tässä. Rikoskomisario Virtanen. Katsokaa Twitchin pääsivua nyt heti. Se Korpela… joo, nimimerkki Reacti0n… joo, nollalla. Hän näyttää rikospaikan materiaalia suorassa lähetyksessä!</voice>
+<break time="0.8s"/>
+<voice name="– Tarvitsen lähetystunnisteen URL" language="finnish" emotion="commanding" pace="medium" tone="neutral">– Tarvitsen lähetystunnisteen URLn ja tarkat aikaleimat. Tehkää säilytyspyyntö alustalle lainvalvontaportin kautta välittömästi, ja varmistakaa talteenotto. Vaatikaa lähetyksen jäädyttämistä, heti!</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="tense" pace="medium" tone="neutral">Hetken päästä linjalta kuului kohinaa ja sitten ääni, jonka Virtanen tunnisti viestintäpäivystäjäksi.</voice>
+<break time="0.8s"/>
+<voice name="– Olemme jo saaneet ilmoituksia. Päivystävä verkkovalvonta seuraa tilannetta. Lasketaan SHA-256-tiiviste, varmistus käynnissä. Katsojia yli sata tuhatta. Keskeytyspyyntö ei etene, koska selkeää sääntörikkomusta ei ole osoitettu. KRP" language="finnish" emotion="procedural" pace="medium" tone="neutral">– Olemme jo saaneet ilmoituksia. Päivystävä verkkovalvonta seuraa tilannetta. Lasketaan SHA-256-tiiviste, varmistus käynnissä. Katsojia yli sata tuhatta. Keskeytyspyyntö ei etene, koska selkeää sääntörikkomusta ei ole osoitettu. KRPn kyber on stand-by. Pyydämme alustalta VOD:n säilyttämistä ja arvioimme jatkotoimet.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="incredulous" pace="medium" tone="neutral">Hän kuuli varmaan väärin. Sata tuhatta katsojaa?</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="shocked" pace="medium" tone="neutral">Virtanen painoi käden suulleen ja kääntyi katsomaan ruutua.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="absorbed" pace="medium" tone="neutral">Eetu oli edelleen paikoillaan, kuulokkeet päässä, kasvot valon värjääminä.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="calm" pace="medium" tone="neutral">Elias seisoi kameran edessä. Ääni oli tyyni, vakaa, melkein rauhoittava.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="provocative" pace="medium" tone="neutral">– Tämä on se, mitä he eivät näyttäneet teille.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="disturbing" pace="medium" tone="neutral">Ruutu zoomasi metsässä makaavaan hahmoon, sitten takaisin Eliakseen.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="frightened" pace="medium" tone="neutral">Virtanen näki, miten hänen poikansa kasvot alkoivat kalveta. Eetu nyökkäsi hitaasti kuin olisi ymmärtänyt jotakin, jota ei voinut pukea sanoiksi.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="awed" pace="medium" tone="neutral">– Se on ihan äijä, Eetu sanoi hiljaa, kasvot liidunvalkoisina. – Kertoo niin kuin se on.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="determined" pace="medium" tone="neutral">Virtanen ei vastannut. Hän oli jo menossa eteiseen, laittamassa takkia päälleen.</voice>
+<break time="0.8s"/>
+<voice name="Hänen puhelimensa oli yhä korvalla, äänet sekoittuivat linjan toisesta päästä" language="finnish" emotion="distracted" pace="medium" tone="neutral">Hänen puhelimensa oli yhä korvalla, äänet sekoittuivat linjan toisesta päästä</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="formal" pace="medium" tone="neutral">– Päivystys on yhteydessä keskusrikospoliisiin. Lähetys otetaan talteen varmuuskopiona.…</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="resolved" pace="medium" tone="neutral">Virtanen katkaisi puhelun, vetäisi vetoketjun kiinni.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="scared" pace="medium" tone="neutral">Eetu vilkaisi häntä. Nyt jo hieman peloissaan.</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="worried" pace="medium" tone="neutral">– Faija, mihin sä meet?</voice>
+<break time="0.8s"/>
+<voice name="Kertoja" language="finnish" emotion="determined" pace="medium" tone="neutral">– Pasilaan.</voice>
+</speak>
