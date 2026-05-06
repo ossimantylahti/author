@@ -258,14 +258,83 @@ def split_voice_segment(segment_text: str, chunk_limit: int) -> list[str]:
 
 
 def extract_openai_ssml_options(text: str) -> tuple[str | None, str | None, str | None]:
+    attrs = extract_voice_attrs(text)
+    return attrs.get("openai_voice"), attrs.get("openai_model"), attrs.get("openai_instructions")
+
+
+def extract_voice_attrs(text: str) -> dict[str, str]:
     m = re.search(r"<voice\s+([^>]*)>", text, flags=re.IGNORECASE)
     if not m:
-        return None, None, None
-    attrs = m.group(1)
-    def read_attr(name: str) -> str | None:
-        match = re.search(rf'{name}="([^"]*)"', attrs, flags=re.IGNORECASE)
-        return match.group(1).strip() if match else None
-    return read_attr("openai_voice"), read_attr("openai_model"), read_attr("openai_instructions")
+        return {}
+    attrs_text = m.group(1)
+    supported = {
+        "name",
+        "openai_voice",
+        "openai_model",
+        "openai_instructions",
+        "kokoro_voice",
+        "piper_voice",
+        "language",
+        "emotion",
+        "pace",
+        "tone",
+    }
+    attrs: dict[str, str] = {}
+    for match in re.finditer(r'([a-zA-Z_][\w-]*)="([^"]*)"', attrs_text):
+        key = match.group(1).strip().lower()
+        if key in supported:
+            attrs[key] = match.group(2).strip()
+    return attrs
+
+
+def looks_like_kokoro_voice(value: str) -> bool:
+    return bool(re.fullmatch(r"[ab][fm]_[a-z0-9_]+", value.strip()))
+
+
+def looks_like_piper_voice(value: str) -> bool:
+    return bool(re.fullmatch(r"[a-z]{2}_[A-Z]{2}-.+-(low|medium|high)", value.strip()))
+
+
+def resolve_renderer_voice_id(
+    renderer: str,
+    speaker: str,
+    text: str,
+    narrators: dict[str, Any],
+    default_voice_id: str,
+) -> str:
+    attrs = extract_voice_attrs(text)
+
+    if renderer == "kokoro":
+        if attrs.get("kokoro_voice"):
+            return attrs["kokoro_voice"]
+        if attrs.get("name"):
+            voice_name = attrs["name"]
+            if looks_like_kokoro_voice(voice_name):
+                return voice_name
+            mapped = choose_voice_id(voice_name, narrators, renderer, "")
+            if mapped:
+                return mapped
+            fallback = choose_voice_id(speaker, narrators, renderer, default_voice_id)
+            print(f"Warning: voice name '{voice_name}' is not a Kokoro voice id; using fallback '{fallback}'.")
+            return fallback
+        return choose_voice_id(speaker, narrators, renderer, default_voice_id)
+
+    if renderer == "piper":
+        if attrs.get("piper_voice"):
+            return attrs["piper_voice"]
+        if attrs.get("name"):
+            voice_name = attrs["name"]
+            if looks_like_piper_voice(voice_name):
+                return voice_name
+            mapped = choose_voice_id(voice_name, narrators, renderer, "")
+            if mapped:
+                return mapped
+            fallback = choose_voice_id(speaker, narrators, renderer, default_voice_id)
+            print(f"Warning: voice name '{voice_name}' is not a Piper voice id; using fallback '{fallback}'.")
+            return fallback
+        return choose_voice_id(speaker, narrators, renderer, default_voice_id)
+
+    return choose_voice_id(speaker, narrators, renderer, default_voice_id)
 
 
 def extract_ssml_languages(text: str) -> set[str]:
@@ -740,9 +809,9 @@ def main() -> int:
             before = pending[:notif_m.start()].strip()
             if before and not is_pause_only_ssml(before):
                 i = part_no
-                chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
+                chunk_voice_id = resolve_renderer_voice_id(args.renderer, speaker, before, narrators, voice_id)
                 out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
-                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker}")
+                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id}")
                 try:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
@@ -781,7 +850,7 @@ def main() -> int:
         if not chunk or is_pause_only_ssml(chunk):
             continue
 
-        chunk_voice_id = choose_voice_id(speaker, narrators, args.renderer, voice_id)
+        chunk_voice_id = resolve_renderer_voice_id(args.renderer, speaker, chunk, narrators, voice_id)
         if args.renderer == "elevenlabs":
             i = part_no
             out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
@@ -809,11 +878,12 @@ def main() -> int:
                         frag_text = str(value)
                         if is_pause_only_ssml(frag_text):
                             continue
+                        resolved_voice_id = resolve_renderer_voice_id(args.renderer, speaker, frag_text, narrators, chunk_voice_id)
                         clean_text = strip_ssml_tags(frag_text)
                         if not clean_text:
                             continue
-                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker}")
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, clean_text, out_path, args.format, pronunciation_map)
+                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id}")
+                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, clean_text, out_path, args.format, pronunciation_map)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)

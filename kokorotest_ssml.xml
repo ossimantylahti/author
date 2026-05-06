@@ -1,0 +1,5 @@
+<speak>
+  <voice name="af_heart">Lukija af heart. Testi.</voice>
+  <break time="0.5s"/>
+  <voice name="am_adam">Lukija am adam. Testi.</voice>
+</speak>
