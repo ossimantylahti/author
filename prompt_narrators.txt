@@ -12,31 +12,371 @@
     }
   },
   "voices": {
-    "Kertoja": {"gender": "male", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-alan-medium", "kokoro": "fi_aino"}},
-    "Miksu": {"gender": "male", "ids": {"elevenlabs": "HfRP3cIhYLmeNHeTvkWK", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Elias": {"gender": "male", "ids": {"elevenlabs": "IKne3meq5aSn9XLyUdCD", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Virtasen vaimo": {"gender": "female", "ids": {"elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "KRP keskus": {"gender": "male", "ids": {"elevenlabs": "eWNJGO7R0mtZgW8BqJYN", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "CherryKitten": {"gender": "female", "ids": {"elevenlabs": "CKfuQaJKfvUG2Wtrda3Y", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat": {"gender": "female", "ids": {"elevenlabs": "bAq8AI9QURijOtmeFFqT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat1": {"gender": "female", "ids": {"elevenlabs": "weA4Q36twV5kwSaTEL0Q", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat2": {"gender": "male", "ids": {"elevenlabs": "xNtG3W2oqJs0cJZuTyBc", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "chat3": {"gender": "male", "ids": {"elevenlabs": "eWNJGO7R0mtZgW8BqJYN", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "chat4": {"gender": "female", "ids": {"elevenlabs": "3dmeMOtCk4YVlhVD8Q5I", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat5": {"gender": "male", "ids": {"elevenlabs": "dOdGri2hgsKdUEaU09Ct", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "chat-kaira": {"gender": "female", "ids": {"elevenlabs": "Ky9j3wxFbp3dSAdrkOEv", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "chat-mod": {"gender": "male", "ids": {"elevenlabs": "BjCmiOq9A2piF1gMic0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Virtanen": {"gender": "male", "ids": {"elevenlabs": "hU9xpIwLBrQ7ueYNjP7b", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Kuosmanen": {"gender": "male", "ids": {"elevenlabs": "0m71kiyu84bdUcKDzG0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Eetu": {"gender": "male", "ids": {"elevenlabs": "0m71kiyu84bdUcKDzG0L", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Sannii": {"gender": "female", "ids": {"elevenlabs": "XdflFrQO8wbGpWMNZHFr", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "Reinboth": {"gender": "female", "ids": {"elevenlabs": "pbVD3LqiqlzGqszOvKuT", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}},
-    "Minister": {"gender": "male", "ids": {"elevenlabs": "esy0r39YPLQjOczyOib8", "piper": "fi_FI-harri-medium", "kokoro": "fi_matti"}},
-    "Mira": {"gender": "female", "ids": {"elevenlabs": "lUCNYQh2kqW2wiie85Qk", "piper": "en_GB-vctk-medium", "kokoro": "fi_aino"}}
+    "Kertoja": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp",
+        "piper": "en_GB-alan-medium",
+        "kokoro": "fi_aino",
+        "openai": "onyx"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "kertoja-onyx-fi",
+          "voice": "onyx",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomeksi rauhallisena kirjallisena pohjoismaisena rikosromaanin kertojana. Käytä luonnollista suomen rytmiä ja selkeitä lausepainoja. Älä ylinäyttele. Sävy on hillitty, kuiva ja hieman synkkä. Älä kuulosta uutistenlukijalta tai tekoälyavustajalta."
+        },
+        "fi_fable": {
+          "profile_id": "kertoja-fable-fi",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomeksi pehmeällä mutta hillityllä äänellä pohjoismaisen rikosromaanin kertojana. Rytmi on rauhallinen, lausepainot selkeät ja tunnelma hienovaraisen synkkä."
+        },
+        "fi_ash": {
+          "profile_id": "kertoja-ash-fi",
+          "voice": "ash",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lue suomeksi kuivalla, harkitulla ja hieman karhealla sävyllä. Pidä ilmaisu niukkana ja jännite tasaisena ilman ylinäyttelemistä."
+        },
+        "en": {
+          "profile_id": "narrator-onyx-en",
+          "voice": "onyx",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Read in English as a calm, literary Nordic crime narrator. Use natural sentence rhythm. Avoid overacting. Keep the tone restrained, dry and slightly sombre. Do not sound like a newsreader or a synthetic assistant."
+        },
+        "es": {
+          "profile_id": "narrador-onyx-es",
+          "voice": "onyx",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Lee en español como un narrador literario de novela negra nórdica. Mantén un ritmo natural, sobrio y contenido. No sobreactúes. El tono debe ser seco, tranquilo y ligeramente sombrío."
+        }
+      }
+    },
+    "Miksu": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "HfRP3cIhYLmeNHeTvkWK",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti",
+        "openai": "echo"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "miksu-echo-fi",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi tuttavallisesti ja rennosti. Sävy on kevyt, nokkela ja selkeä."
+        },
+        "en": {
+          "profile_id": "miksu-echo-en",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English in a familiar, relaxed tone with light wit and clear diction."
+        },
+        "es": {
+          "profile_id": "miksu-echo-es",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español con tono cercano y relajado, con un matiz ingenioso y dicción clara."
+        }
+      }
+    },
+    "Elias": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "IKne3meq5aSn9XLyUdCD",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti",
+        "openai": "echo"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "elias-echo-fi",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi harkiten ja analyyttisesti. Sävy on matala, rauhallinen ja tarkka."
+        },
+        "en": {
+          "profile_id": "elias-echo-en",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English in an analytical and measured style. Keep the tone calm, low and precise."
+        },
+        "es": {
+          "profile_id": "elias-echo-es",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español de forma analítica y medida. Mantén un tono sereno, grave y preciso."
+        }
+      }
+    },
+    "Virtasen vaimo": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "Dkbbg7k9Ir9TNzn5GYLp",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino",
+        "openai": "fable"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "virtasen-vaimo-fable-fi",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi lämpimästi mutta väsyneesti. Sävy on arkinen, empaattinen ja hieman huolestunut."
+        },
+        "en": {
+          "profile_id": "virtanen-wife-fable-en",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English with a warm but tired tone. Keep it intimate, practical and gently concerned."
+        },
+        "es": {
+          "profile_id": "esposa-virtanen-fable-es",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español con calidez y un leve cansancio. Mantén un tono cercano, práctico y suavemente preocupado."
+        }
+      }
+    },
+    "KRP keskus": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "eWNJGO7R0mtZgW8BqJYN",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti",
+        "openai": "onyx"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "krp-keskus-onyx-fi",
+          "voice": "onyx",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi viranomaismaisesti ja neutraalisti. Rytmi on tasainen ja informatiivinen."
+        },
+        "en": {
+          "profile_id": "nbi-dispatch-onyx-en",
+          "voice": "onyx",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English like official dispatch communications: neutral, steady and informative."
+        },
+        "es": {
+          "profile_id": "central-krp-onyx-es",
+          "voice": "onyx",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español con estilo de central operativa: neutral, estable e informativo."
+        }
+      }
+    },
+    "CherryKitten": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "CKfuQaJKfvUG2Wtrda3Y",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino",
+        "openai": "fable"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "cherrykitten-fable-fi",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi leikkisästi ja energisesti, mutta pidä artikulaatio selkeänä. Sävyssä on streamaajan karismaa."
+        },
+        "en": {
+          "profile_id": "cherrykitten-fable-en",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English with playful, high-energy streamer charisma while keeping pronunciation clear."
+        },
+        "es": {
+          "profile_id": "cherrykitten-fable-es",
+          "voice": "fable",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español con energía juguetona y carisma de streamer, manteniendo una dicción clara."
+        }
+      }
+    },
+    "chat": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "bAq8AI9QURijOtmeFFqT",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    },
+    "chat1": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "weA4Q36twV5kwSaTEL0Q",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    },
+    "chat2": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "xNtG3W2oqJs0cJZuTyBc",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti"
+      }
+    },
+    "chat3": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "eWNJGO7R0mtZgW8BqJYN",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti"
+      }
+    },
+    "chat4": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "3dmeMOtCk4YVlhVD8Q5I",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    },
+    "chat5": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "dOdGri2hgsKdUEaU09Ct",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti"
+      }
+    },
+    "chat-kaira": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "Ky9j3wxFbp3dSAdrkOEv",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    },
+    "chat-mod": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "BjCmiOq9A2piF1gMic0L",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti"
+      }
+    },
+    "Virtanen": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "hU9xpIwLBrQ7ueYNjP7b",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti",
+        "openai": "echo"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "virtanen-echo-fi",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi rikospoliisina: rauhallinen, täsmällinen ja vähäeleinen. Pidä auktoriteetti ilman kovaa painostusta."
+        },
+        "en": {
+          "profile_id": "virtanen-echo-en",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English as a seasoned detective: concise, composed and authoritative, without theatrical delivery."
+        },
+        "es": {
+          "profile_id": "virtanen-echo-es",
+          "voice": "echo",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español como un inspector experimentado: conciso, sereno y con autoridad sobria."
+        }
+      }
+    },
+    "Kuosmanen": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "0m71kiyu84bdUcKDzG0L",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti"
+      }
+    },
+    "Eetu": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "0m71kiyu84bdUcKDzG0L",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti",
+        "openai": "ash"
+      },
+      "openai_profiles": {
+        "fi": {
+          "profile_id": "eetu-ash-fi",
+          "voice": "ash",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Puhu suomeksi nuorekkaasti ja suoraviivaisesti. Sävy on nopea, terävä ja hieman kärsimätön."
+        },
+        "en": {
+          "profile_id": "eetu-ash-en",
+          "voice": "ash",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Speak in English with youthful directness: quick, sharp and slightly impatient."
+        },
+        "es": {
+          "profile_id": "eetu-ash-es",
+          "voice": "ash",
+          "model": "gpt-4o-mini-tts",
+          "instructions": "Habla en español con energía juvenil: directo, rápido y un poco impaciente."
+        }
+      }
+    },
+    "Sannii": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "XdflFrQO8wbGpWMNZHFr",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    },
+    "Reinboth": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "pbVD3LqiqlzGqszOvKuT",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    },
+    "Minister": {
+      "gender": "male",
+      "ids": {
+        "elevenlabs": "esy0r39YPLQjOczyOib8",
+        "piper": "fi_FI-harri-medium",
+        "kokoro": "fi_matti"
+      }
+    },
+    "Mira": {
+      "gender": "female",
+      "ids": {
+        "elevenlabs": "lUCNYQh2kqW2wiie85Qk",
+        "piper": "en_GB-vctk-medium",
+        "kokoro": "fi_aino"
+      }
+    }
   },
   "aliases": {
-    "Elias": ["Elias Korpela", "Korpela", "Reacti0n", "Reaktion"],
-    "Virtasen vaimo": ["vaimo", "nainen"],
-    "KRP keskus": ["KRP:n keskus", "päivystys", "viestintäpäivystäjä", "verkkovalvonta"]
+    "Elias": [
+      "Elias Korpela",
+      "Korpela",
+      "Reacti0n",
+      "Reaktion"
+    ],
+    "Virtasen vaimo": [
+      "vaimo",
+      "nainen"
+    ],
+    "KRP keskus": [
+      "KRP:n keskus",
+      "päivystys",
+      "viestintäpäivystäjä",
+      "verkkovalvonta"
+    ]
   }
 }
