@@ -36,12 +36,12 @@ INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF\U000024C2-\U0001F251]+", flags=re.UNICODE)
 
 SPEECH_VERB_ROOTS = {
-    "finnish": ["sano", "kysy", "vasta", "huuda", "totea", "juttele", "mainitse", "kommentoi", "kuiska", "karju", "mumise", "lausu", "selitä", "ilmoita", "myönnä", "kiistä", "toista", "mutise", "hihku", "naurahda"],
+    "finnish": ["sano", "kysy", "vasta", "huuda", "totea", "juttele", "mainitse", "kommentoi", "kuiska", "karju", "mumise", "lausu", "selitä", "ilmoita", "myönnä", "kiistä", "toista", "mutise", "hihku", "naurahda", "neuvo", "täydentä", "jatka", "lisä", "toka", "huikka", "kerro"],
     "english": ["say", "ask", "answer", "reply", "shout", "whisper", "murmur", "remark", "state", "announce", "admit", "deny", "yell", "scream", "observe", "note", "repeat", "explain", "utter", "tell"],
     "spanish": ["dec", "pregunt", "respond", "contest", "grit", "susurr", "murmur", "afirm", "neg", "coment", "explic", "repet", "pronunci", "admit", "anunci", "observ", "añad", "indic", "declar", "dij"],
 }
 SPEECH_VERB_SUFFIXES = {
-    "finnish": ["a", "an", "aa", "aan", "oi", "oin", "oivat", "ot", "omme", "ossa", "osta", "osti", "oivat", "oisi", "oisi", "oimme", "oivat", "n", "t", "mme", "tte", "vat", "in", "it", "imme", "itte", "ivat", "isin", "isit", "isi", "isimme", "isitte", "isivat", "nut", "nyt", "neet", "neet", "massa", "masta", "malla", "malle", "melta"],
+    "finnish": ["a", "an", "aa", "aan", "oi", "oin", "oivat", "ot", "omme", "ossa", "osta", "osti", "oivat", "oisi", "oisi", "oimme", "oivat", "n", "t", "mme", "tte", "vat", "in", "it", "imme", "itte", "ivat", "isin", "isit", "isi", "isimme", "isitte", "isivat", "nut", "nyt", "neet", "neet", "massa", "masta", "malla", "malle", "melta", "si"],
     "english": ["", "s", "ed", "ing", "er", "ers", "ly", "able", "ably", "ation", "ations", "ment", "ments", "t", "ts", "d", "en", "es"],
     "spanish": ["ar", "o", "as", "a", "amos", "áis", "an", "é", "aste", "ó", "aron", "aba", "abas", "ábamos", "aban", "aré", "arás", "ará", "arán", "aría", "arías", "arían", "ado", "ada", "ados", "adas", "ando", "en", "emos", "éis"],
 }
@@ -56,7 +56,7 @@ def _build_speech_verbs() -> set[str]:
                     forms.add(token)
     return forms
 
-SPEECH_VERBS = _build_speech_verbs()
+SPEECH_VERBS = _build_speech_verbs() | {"neuvonut", "täydentänyt", "huikkasi", "kysyi", "vastasi", "sanoi"}
 
 @dataclass
 class OpenAIProfile:
@@ -269,6 +269,109 @@ def clean_dialogue_text(text: str) -> str:
     return cleaned.strip()
 
 
+def ensure_sentence_punctuation(text: str) -> str:
+    value = (text or "").strip()
+    if not value:
+        return value
+    if value[-1] in ".!?…":
+        return value
+    return f"{value}."
+
+
+def _dialogue_tag_subject_present(text: str, narrators: dict[str, str], alias_map: dict[str, str]) -> bool:
+    lowered = f" {text.lower()} "
+    if re.search(r"\bhän\b", lowered, re.IGNORECASE):
+        return True
+    for name in narrators:
+        if name == NARRATOR_NAME:
+            continue
+        if re.search(rf"\b{re.escape(name.lower())}\b", lowered):
+            return True
+    for canonical in set(alias_map.values()):
+        if canonical == NARRATOR_NAME:
+            continue
+        lowered_name = canonical.lower()
+        if re.search(rf"\b{re.escape(lowered_name)}\b", lowered):
+            return True
+    return False
+
+
+def looks_like_dialogue_tag(text: str, narrators: dict[str, str], alias_map: dict[str, str]) -> bool:
+    candidate = (text or "").strip(" –—-\t")
+    if not candidate:
+        return False
+    if not _dialogue_tag_subject_present(candidate, narrators, alias_map):
+        return False
+    words = re.findall(r"[A-Za-zÅÄÖåäöÁÉÍÓÚÜÑáéíóúüñ'-]+", candidate.lower())
+    return any(word in SPEECH_VERBS for word in words)
+
+
+def split_trailing_dialogue_tag(text: str, speaker: str, narrators: dict[str, str], alias_map: dict[str, str]) -> list[ScriptSegment]:
+    content = clean_dialogue_text(text)
+    clauses = [c.strip() for c in re.split(r"(?<=[.!?])\s+", content) if c.strip()]
+    spoken_part = ""
+    trailing = ""
+    if len(clauses) >= 2:
+        spoken_part = " ".join(clauses[:-1]).strip()
+        trailing = clauses[-1].strip()
+    else:
+        comma_idx = content.rfind(",")
+        if comma_idx <= 0:
+            return [ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=content)]
+        spoken_part = content[:comma_idx + 1].strip()
+        trailing = content[comma_idx + 1:].strip()
+    if not spoken_part or not trailing or not looks_like_dialogue_tag(trailing, narrators, alias_map):
+        return [ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=content)]
+    return [
+        ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=spoken_part),
+        ScriptSegment(segment_id=0, type="narration", speaker=NARRATOR_NAME, text=ensure_sentence_punctuation(trailing)),
+    ]
+
+
+def split_embedded_dialogue_tag(text: str, speaker: str, narrators: dict[str, str], alias_map: dict[str, str]) -> list[ScriptSegment]:
+    content = clean_dialogue_text(text)
+    marker = re.search(r"\s[–—-]\s+", content)
+    if not marker:
+        return [ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=content)]
+    before = content[:marker.start()].strip()
+    after = clean_dialogue_text(content[marker.end():])
+    clauses = [c.strip() for c in re.split(r"(?<=[.!?])\s+", before) if c.strip()]
+    spoken_head = ""
+    embedded_tag = ""
+    if len(clauses) >= 2:
+        spoken_head = " ".join(clauses[:-1]).strip()
+        embedded_tag = clauses[-1].strip()
+    else:
+        comma_idx = before.rfind(",")
+        if comma_idx <= 0:
+            return [ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=content)]
+        spoken_head = before[:comma_idx + 1].strip()
+        embedded_tag = before[comma_idx + 1:].strip()
+    if not spoken_head or not embedded_tag:
+        return [ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=content)]
+    if not looks_like_dialogue_tag(embedded_tag, narrators, alias_map):
+        return [ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=content)]
+    result = [
+        ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=spoken_head),
+        ScriptSegment(segment_id=0, type="narration", speaker=NARRATOR_NAME, text=ensure_sentence_punctuation(embedded_tag)),
+    ]
+    if after:
+        result.append(ScriptSegment(segment_id=0, type="dialogue", speaker=speaker, text=ensure_sentence_punctuation(after)))
+    return result
+
+
+def split_dialogue_with_embedded_tags(segment: ScriptSegment, narrators: dict[str, str], alias_map: dict[str, str]) -> list[ScriptSegment]:
+    if segment.type != "dialogue":
+        return [segment]
+    embedded = split_embedded_dialogue_tag(segment.text, segment.speaker, narrators, alias_map)
+    if len(embedded) > 1:
+        return embedded
+    trailing = split_trailing_dialogue_tag(segment.text, segment.speaker, narrators, alias_map)
+    if len(trailing) > 1:
+        return trailing
+    return [ScriptSegment(segment_id=segment.segment_id, type="dialogue", speaker=segment.speaker, text=clean_dialogue_text(segment.text), confidence=segment.confidence)]
+
+
 def normalise_segment_text_for_compare(text: str) -> str:
     value = clean_dialogue_text(text).lower().strip()
     value = re.sub(r'[“”"\'«»]', "", value)
@@ -326,7 +429,21 @@ def normalise_segments(
             text = clean_dialogue_text(segment.text)
         if not text:
             continue
-        normalised.append(ScriptSegment(segment_id=segment.segment_id, type=seg_type, speaker=speaker, text=text, confidence=segment.confidence))
+        cleaned = ScriptSegment(segment_id=segment.segment_id, type=seg_type, speaker=speaker, text=text, confidence=segment.confidence)
+        if cleaned.type == "dialogue":
+            split_segments = split_dialogue_with_embedded_tags(cleaned, narrators, alias_map)
+            for idx, split_segment in enumerate(split_segments):
+                normalised.append(
+                    ScriptSegment(
+                        segment_id=cleaned.segment_id * 10 + idx,
+                        type=split_segment.type,
+                        speaker=split_segment.speaker,
+                        text=split_segment.text,
+                        confidence=cleaned.confidence,
+                    )
+                )
+        else:
+            normalised.append(cleaned)
     return deduplicate_segments(normalised)
 
 # rest mostly unchanged, shortened for brevity in this patch context
