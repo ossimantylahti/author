@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from urllib import error, request
 import shutil
+import importlib
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -307,6 +308,49 @@ def looks_like_renderer_voice_id(renderer: str, value: str) -> bool:
     return False
 
 
+def map_ssml_language_to_bcp47(language: str | None) -> str | None:
+    value = (language or "").strip().lower()
+    mapping = {
+        "finnish": "fi_FI",
+        "fi": "fi_FI",
+        "fi-fi": "fi_FI",
+        "suomi": "fi_FI",
+        "english": "en_US",
+        "en": "en_US",
+        "en-us": "en_US",
+        "en-gb": "en_GB",
+        "spanish": "es_ES",
+        "es": "es_ES",
+        "es-mx": "es_MX",
+        "espanol": "es_ES",
+        "español": "es_ES",
+    }
+    return mapping.get(value)
+
+
+def piper_voice_language_prefix(voice_id: str) -> str | None:
+    m = re.match(r"^([a-z]{2}_[A-Z]{2})-", voice_id.strip())
+    return m.group(1) if m else None
+
+
+def validate_piper_language_match(text: str, voice_id: str) -> tuple[str | None, str | None]:
+    attrs = extract_voice_attrs(text)
+    ssml_language = attrs.get("language")
+    expected = map_ssml_language_to_bcp47(ssml_language)
+    actual = piper_voice_language_prefix(voice_id)
+    print(f"Piper language expected from SSML: {expected or 'unknown'}")
+    print(f"Piper voice language: {actual or 'unknown'}")
+    if not expected or not actual:
+        return expected, actual
+    if expected != actual:
+        print(
+            f"Warning: SSML language is {ssml_language!r} ({expected}), but Piper voice '{voice_id}' appears to be {actual}. "
+            "Piper language is controlled by the selected voice model, so pronunciation may be wrong.",
+            file=sys.stderr,
+        )
+    return expected, actual
+
+
 def narrator_voice_id(narrators: dict[str, Any], narrator_name: str, renderer: str) -> str | None:
     voices = narrators.get("voices", {})
     speaker_data = voices.get(narrator_name, {}) if isinstance(voices, dict) else {}
@@ -494,6 +538,125 @@ def ensure_renderer_installed(renderer: str) -> None:
     raise RuntimeError("Kokoro puuttuu. Asenna esim: pip install kokoro-onnx")
 
 
+def _check_sounddevice_import() -> tuple[bool, str]:
+    proc = subprocess.run(
+        [sys.executable, "-c", "import sounddevice"],
+        text=True,
+        capture_output=True,
+    )
+    combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    return proc.returncode == 0, combined
+
+
+def _download_with_help(url: str, destination: Path, what: str) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading {what} to {destination}")
+    try:
+        request.urlretrieve(url, destination)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to download {what} from {url}: {exc}\n"
+            f"Manual download:\n"
+            f"wget -O {destination} {url}"
+        ) from exc
+
+
+def ensure_kokoro_ready(args: argparse.Namespace) -> tuple[Path, Path]:
+    kokoro_cli = shutil.which("kokoro-tts")
+    has_kokoro_onnx = False
+    try:
+        importlib.import_module("kokoro_onnx")
+        has_kokoro_onnx = True
+    except Exception:
+        has_kokoro_onnx = False
+
+    if not kokoro_cli and not has_kokoro_onnx:
+        raise RuntimeError(
+            "Kokoro is not installed. Activate your virtual environment and run: pip install kokoro-tts kokoro-onnx"
+        )
+
+    if kokoro_cli:
+        sd_ok, sd_details = _check_sounddevice_import()
+        if not sd_ok:
+            if "PortAudio library not found" in sd_details:
+                raise RuntimeError(
+                    "PortAudio is missing for Kokoro CLI.\n"
+                    "Install system and Python dependencies manually:\n"
+                    "sudo apt update\n"
+                    "sudo apt install -y portaudio19-dev libportaudio2 libportaudiocpp0\n"
+                    "pip install sounddevice soundfile"
+                )
+            raise RuntimeError(f"Kokoro sounddevice import failed:\n{sd_details}")
+
+    cache_dir = Path.home() / ".cache" / "om-author" / "kokoro"
+    model_candidates = [
+        Path(args.kokoro_model).expanduser() if args.kokoro_model else None,
+        Path(os.environ["KOKORO_MODEL"]).expanduser() if os.environ.get("KOKORO_MODEL") else None,
+        Path.cwd() / "kokoro-v1.0.onnx",
+        cache_dir / "kokoro-v1.0.onnx",
+    ]
+    voices_candidates = [
+        Path(args.kokoro_voices).expanduser() if args.kokoro_voices else None,
+        Path(os.environ["KOKORO_VOICES"]).expanduser() if os.environ.get("KOKORO_VOICES") else None,
+        Path.cwd() / "voices-v1.0.bin",
+        cache_dir / "voices-v1.0.bin",
+    ]
+    model_path = next((p for p in model_candidates if p and p.exists()), None)
+    voices_path = next((p for p in voices_candidates if p and p.exists()), None)
+
+    model_url = "https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx"
+    voices_url = "https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin"
+    target_model = cache_dir / "kokoro-v1.0.onnx"
+    target_voices = cache_dir / "voices-v1.0.bin"
+
+    if (not model_path or not voices_path) and args.kokoro_auto_download:
+        if not model_path:
+            _download_with_help(model_url, target_model, "Kokoro model")
+            model_path = target_model
+        if not voices_path:
+            _download_with_help(voices_url, target_voices, "Kokoro voices")
+            voices_path = target_voices
+
+    if not model_path or not voices_path:
+        raise RuntimeError(
+            "Kokoro model files were not found and auto-download is disabled.\n"
+            "Please download manually:\n"
+            f"wget -O {target_model} {model_url}\n"
+            f"wget -O {target_voices} {voices_url}"
+        )
+
+    return model_path.resolve(), voices_path.resolve()
+
+
+def collect_kokoro_voices_from_ssml(text: str) -> set[str]:
+    voices: set[str] = set()
+    for attrs in re.findall(r"<voice\\s+([^>]*)>", text, flags=re.IGNORECASE):
+        explicit = re.search(r'kokoro_voice="([^"]+)"', attrs, flags=re.IGNORECASE)
+        if explicit and explicit.group(1).strip():
+            voices.add(explicit.group(1).strip())
+            continue
+        direct = re.search(r'name="([^"]+)"', attrs, flags=re.IGNORECASE)
+        if direct and looks_like_kokoro_voice(direct.group(1)):
+            voices.add(direct.group(1).strip())
+    return voices
+
+
+def validate_kokoro_voices(ssml_text: str) -> None:
+    used = collect_kokoro_voices_from_ssml(ssml_text)
+    if not used:
+        return
+    proc = subprocess.run(["kokoro-tts", "--help-voices"], text=True, capture_output=True)
+    if proc.returncode != 0:
+        print("Warning: could not list Kokoro voices with 'kokoro-tts --help-voices'. Skipping voice validation.")
+        return
+    listed = set(re.findall(r"\\b[ab][fm]_[a-z0-9_]+\\b", f"{proc.stdout}\n{proc.stderr}"))
+    if not listed:
+        print("Warning: could not parse Kokoro voice list from 'kokoro-tts --help-voices'.")
+        return
+    for voice in sorted(used):
+        if voice not in listed:
+            print(f"Warning: Kokoro voice '{voice}' was not found in kokoro-tts --help-voices output.")
+
 
 
 def piper_download_candidates(voice_id: str) -> list[str]:
@@ -517,14 +680,79 @@ def ensure_piper_voice_available(voice_id: str) -> str:
     )
 
 
-def map_kokoro_language(text: str) -> str | None:
-    language_map = {"finnish": "fi", "english": "en-us", "spanish": "es-mx"}
+def collect_renderer_voices_from_ssml(text: str, renderer: str) -> set[str]:
+    voices: set[str] = set()
+    for attrs in re.findall(r"<voice\s+([^>]*)>", text, flags=re.IGNORECASE):
+        renderer_attr = re.search(rf'{renderer}_voice="([^"]+)"', attrs, flags=re.IGNORECASE)
+        if renderer_attr and renderer_attr.group(1).strip():
+            voices.add(renderer_attr.group(1).strip())
+            continue
+        direct = re.search(r'name="([^"]+)"', attrs, flags=re.IGNORECASE)
+        if direct and looks_like_renderer_voice_id(renderer, direct.group(1).strip()):
+            voices.add(direct.group(1).strip())
+    return voices
+
+
+def ensure_piper_ready(content: str, narrators: dict[str, Any], cli_voice_id: str | None) -> None:
+    candidate_voices = collect_renderer_voices_from_ssml(content, "piper")
+    fallback = fallback_narrator_voice_id(narrators, "piper")
+    if fallback:
+        candidate_voices.add(fallback)
+    if cli_voice_id:
+        candidate_voices.add(cli_voice_id)
+    for voice_id in sorted(candidate_voices):
+        ensure_piper_voice_available(voice_id)
+
+
+def maybe_apply_piper_finnish_fallback(text: str, voice_id: str, voice_source: str, narrators: dict[str, Any]) -> str:
     attrs = extract_voice_attrs(text)
-    language = attrs.get("language", "").strip().lower()
-    return language_map.get(language)
+    expected = map_ssml_language_to_bcp47(attrs.get("language"))
+    actual = piper_voice_language_prefix(voice_id)
+    if expected != "fi_FI":
+        return voice_id
+    if actual == "fi_FI":
+        return voice_id
+    if voice_source == "ssml_renderer_attribute":
+        return voice_id
+    fallback_voice = fallback_narrator_voice_id(narrators, "piper")
+    if fallback_voice:
+        print(
+            f"Warning: Piper voice '{voice_id}' does not match Finnish SSML; using fallback narrator Kertoja Piper voice '{fallback_voice}'.",
+            file=sys.stderr,
+        )
+        return fallback_voice
+    return voice_id
 
 
-def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None) -> str:
+def map_kokoro_language(language: str | None) -> str:
+    value = (language or "").strip().lower()
+    mapping = {
+        "finnish": "fi",
+        "fi": "fi",
+        "fi-fi": "fi",
+        "suomi": "fi",
+        "english": "en-us",
+        "en": "en-us",
+        "en-us": "en-us",
+        "en-gb": "en-gb",
+        "spanish": "es",
+        "es": "es",
+        "es-mx": "es",
+        "espanol": "es",
+        "español": "es",
+    }
+    return mapping.get(value, "en-us")
+
+
+def detect_kokoro_fallback_language(text: str, cli_language: str | None) -> str:
+    if cli_language and cli_language.strip():
+        return map_kokoro_language(cli_language)
+    if re.search(r"[åäöÅÄÖ]", text):
+        return "fi"
+    return "en-us"
+
+
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None, cli_language: str | None = None) -> str:
     if renderer == "openai":
         client = OpenAI()
         ssml_voice, ssml_model, ssml_instructions = extract_openai_ssml_options(text)
@@ -549,6 +777,7 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
 
     if renderer == "piper":
         text = apply_pronunciation_aliases(text, pronunciation_map or [])
+        validate_piper_language_match(text, voice_id)
         cmd = ["piper", "--model", voice_id, "--output_file", str(out_path)]
         proc = subprocess.run(cmd, input=strip_ssml_tags(text), text=True, capture_output=True)
         if proc.returncode == 0:
@@ -589,9 +818,12 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
             "--format",
             audio_format,
         ]
-        mapped_lang = map_kokoro_language(text)
-        if mapped_lang:
-            cmd.extend(["--lang", mapped_lang])
+        attrs = extract_voice_attrs(text)
+        mapped_lang = map_kokoro_language(attrs.get("language")) if attrs.get("language") else detect_kokoro_fallback_language(text, cli_language)
+        cmd.extend(["--lang", mapped_lang])
+        print(f"Kokoro language: {mapped_lang}")
+        if attrs.get("language", "").strip().lower() == "finnish" and mapped_lang != "fi":
+            print("Warning: BUG: Kokoro language mapping mismatch; language='finnish' must map to --lang fi.")
         if kokoro_model:
             cmd.extend(["--model", kokoro_model])
         if kokoro_voices:
@@ -735,8 +967,10 @@ def main() -> int:
     parser.add_argument("--voice-name", default=None, help="Deprecated fallback narrator name. Prefer SSML voice attributes and prompt_narrators.txt.")
     parser.add_argument("--voice-id", default=None, help="Deprecated fallback renderer voice id. Prefer SSML voice attributes and prompt_narrators.txt.")
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
-    parser.add_argument("--kokoro-model", default=None, help="Optional Kokoro model path/name for kokoro-tts.")
-    parser.add_argument("--kokoro-voices", default=None, help="Optional Kokoro voices path for kokoro-tts.")
+    parser.add_argument("--kokoro-model", default=None, help="Kokoro model path. If omitted, checks CLI/env/current directory/cache.")
+    parser.add_argument("--kokoro-voices", default=None, help="Kokoro voices path. If omitted, checks CLI/env/current directory/cache.")
+    parser.add_argument("--kokoro-auto-download", dest="kokoro_auto_download", action="store_true", default=True, help="Automatically download missing Kokoro model files into ~/.cache/om-author/kokoro/.")
+    parser.add_argument("--no-kokoro-auto-download", dest="kokoro_auto_download", action="store_false", help="Do not auto-download missing Kokoro model files.")
     parser.add_argument("--model-id", default=None)
     parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT, help="Maksimimerkkimäärä per chunk (kaikille renderöijille enintään 4000).")
     parser.add_argument("--format", choices=["mp3"], default=DEFAULT_AUDIO_FORMAT, help="Ulostuloäänen formaatti käyttäjälle. Tällä hetkellä tuettu: mp3. Ohjelma mapittaa tämän renderer-kohtaiseen parametriin.")
@@ -770,6 +1004,17 @@ def main() -> int:
     try:
         ensure_renderer_installed(args.renderer)
         ensure_ffmpeg_installed()
+        if args.renderer == "kokoro":
+            model_path, voices_path = ensure_kokoro_ready(args)
+            args.kokoro_model = str(model_path)
+            args.kokoro_voices = str(voices_path)
+            print("Kokoro backend: kokoro-tts CLI")
+            print(f"Kokoro model: {args.kokoro_model}")
+            print(f"Kokoro voices: {args.kokoro_voices}")
+            print(f"Kokoro auto-download: {'enabled' if args.kokoro_auto_download else 'disabled'}")
+            validate_kokoro_voices(content)
+        elif args.renderer == "piper":
+            ensure_piper_ready(content, narrators, args.voice_id)
     except RuntimeError as e:
         print(f"Virhe: {e}", file=sys.stderr)
         return 2
@@ -869,12 +1114,15 @@ def main() -> int:
                 i = part_no
                 chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, before, speaker, narrators, args.voice_name, args.voice_id)
                 out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
-                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source}")
+                before_attrs = extract_voice_attrs(before)
+                print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source} language={before_attrs.get('language', 'unknown')}")
                 try:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices)
+                        if args.renderer == "piper":
+                            chunk_voice_id = maybe_apply_piper_finnish_fallback(before, chunk_voice_id, chunk_voice_source, narrators)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -940,8 +1188,12 @@ def main() -> int:
                         clean_text = strip_ssml_tags(frag_text)
                         if not clean_text:
                             continue
-                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source}")
-                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, clean_text, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices)
+                        frag_attrs = extract_voice_attrs(frag_text)
+                        print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source} language={frag_attrs.get('language', 'unknown')}")
+                        if args.renderer == "piper":
+                            resolved_voice_id = maybe_apply_piper_finnish_fallback(frag_text, resolved_voice_id, resolved_voice_source, narrators)
+                        render_text = frag_text if args.renderer == "piper" else clean_text
+                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, render_text, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
