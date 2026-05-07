@@ -24,8 +24,8 @@ OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_AUDIO_FORMAT = "mp3"
 MAX_RENDERER_CHUNK_LIMIT = 4000
 DEFAULT_NARRATORS_FILE = "prompt_narrators.txt"
-DEFAULT_PRONUNCIATION_FILE = "prompt_pronunciation.txt"
-DEFAULT_PRONUNCIATION_DICTIONARY = "pronunciation_dictionary.json"
+DEFAULT_PRONUNCIATION_FILE = "pronunciation/prompt_pronunciation.txt"
+DEFAULT_PRONUNCIATION_DICTIONARY = "pronunciation/pronunciation_dictionary.json"
 MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = MAX_RENDERER_CHUNK_LIMIT
 NARRATOR_NAME = "Kertoja"
@@ -624,7 +624,8 @@ def ensure_kokoro_ready(args: argparse.Namespace) -> tuple[Path, Path]:
                 )
             raise RuntimeError(f"Kokoro sounddevice import failed:\n{sd_details}")
 
-    cache_dir = Path.home() / ".cache" / "om-author" / "kokoro"
+    cache_root = Path(args.data_dir).expanduser()
+    cache_dir = cache_root / "kokoro"
     model_candidates = [
         Path(args.kokoro_model).expanduser() if args.kokoro_model else None,
         Path(os.environ["KOKORO_MODEL"]).expanduser() if os.environ.get("KOKORO_MODEL") else None,
@@ -702,9 +703,9 @@ def piper_download_candidates(voice_id: str) -> list[str]:
     return candidates
 
 
-def ensure_piper_voice_available(voice_id: str) -> str:
+def ensure_piper_voice_available(voice_id: str, data_dir: Path) -> str:
     for candidate in piper_download_candidates(voice_id):
-        cmd = [sys.executable, "-m", "piper.download_voices", candidate]
+        cmd = [sys.executable, "-m", "piper.download_voices", candidate, "--data-dir", str(data_dir)]
         proc = subprocess.run(cmd, text=True, capture_output=True)
         if proc.returncode == 0:
             if candidate != voice_id:
@@ -729,7 +730,7 @@ def collect_renderer_voices_from_ssml(text: str, renderer: str) -> set[str]:
     return voices
 
 
-def ensure_piper_ready(content: str, narrators: dict[str, Any], cli_voice_id: str | None) -> None:
+def ensure_piper_ready(content: str, narrators: dict[str, Any], cli_voice_id: str | None, data_dir: Path) -> None:
     candidate_voices = collect_renderer_voices_from_ssml(content, "piper")
     for language in ("fi-FI", "en-GB", "en-US", "es-MX", None):
         fallback = fallback_narrator_voice_id(narrators, "piper", language)
@@ -738,7 +739,7 @@ def ensure_piper_ready(content: str, narrators: dict[str, Any], cli_voice_id: st
     if cli_voice_id:
         candidate_voices.add(cli_voice_id)
     for voice_id in sorted(candidate_voices):
-        ensure_piper_voice_available(voice_id)
+        ensure_piper_voice_available(voice_id, data_dir)
 
 
 def map_kokoro_language(language: str | None) -> str:
@@ -769,7 +770,7 @@ def detect_kokoro_fallback_language(text: str, cli_language: str | None) -> str:
     return "en-us"
 
 
-def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None, cli_language: str | None = None) -> str:
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None, cli_language: str | None = None, piper_data_dir: Path | None = None) -> str:
     if renderer == "openai":
         client = OpenAI()
         ssml_voice, ssml_model, ssml_instructions = extract_openai_ssml_options(text)
@@ -807,7 +808,9 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
             return voice_id
         combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
         if "Unable to find voice" in combined:
-            resolved_voice = ensure_piper_voice_available(voice_id)
+            if not piper_data_dir:
+                raise RuntimeError("Piper data directory is missing for auto-download.")
+            resolved_voice = ensure_piper_voice_available(voice_id, piper_data_dir)
             retry = subprocess.run(["piper", "--model", resolved_voice, "--output_file", str(out_path)], input=strip_ssml_tags(text), text=True, capture_output=True)
             if retry.returncode == 0:
                 return resolved_voice
@@ -997,6 +1000,7 @@ def main() -> int:
     parser.add_argument("--kokoro-auto-download", dest="kokoro_auto_download", action="store_true", default=True, help="Automatically download missing Kokoro model files into ~/.cache/om-author/kokoro/.")
     parser.add_argument("--no-kokoro-auto-download", dest="kokoro_auto_download", action="store_false", help="Do not auto-download missing Kokoro model files.")
     parser.add_argument("--model-id", default=None)
+    parser.add_argument("--data-dir", default=str(Path.home() / ".cache" / "om-author"), help="Directory for downloaded runtime assets (kokoro/piper)")
     parser.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT, help="Maksimimerkkimäärä per chunk (kaikille renderöijille enintään 4000).")
     parser.add_argument("--format", choices=["mp3"], default=DEFAULT_AUDIO_FORMAT, help="Ulostuloäänen formaatti käyttäjälle. Tällä hetkellä tuettu: mp3. Ohjelma mapittaa tämän renderer-kohtaiseen parametriin.")
     parser.add_argument("--stability", type=float, default=0.45)
@@ -1039,7 +1043,7 @@ def main() -> int:
             print(f"Kokoro auto-download: {'enabled' if args.kokoro_auto_download else 'disabled'}")
             validate_kokoro_voices(content)
         elif args.renderer == "piper":
-            ensure_piper_ready(content, narrators, args.voice_id)
+            ensure_piper_ready(content, narrators, args.voice_id, Path(args.data_dir).expanduser() / "piper")
     except RuntimeError as e:
         print(f"Virhe: {e}", file=sys.stderr)
         return 2
@@ -1155,7 +1159,7 @@ def main() -> int:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper")
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -1224,7 +1228,7 @@ def main() -> int:
                         frag_attrs = extract_voice_attrs(frag_text)
                         print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source} ssml_language={normalise_ssml_language(frag_attrs.get('language')) or 'unknown'}")
                         render_text = frag_text if args.renderer == "piper" else clean_text
-                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, render_text, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language)
+                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, render_text, out_path, args.format, pronunciation_map, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper")
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
