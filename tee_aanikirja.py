@@ -133,6 +133,26 @@ class PronunciationRule:
     origin_language: str | None
 
 
+def preview_pronunciation_rules(active_map: list[Any], limit: int = 20) -> list[str]:
+    preview: list[str] = []
+    for item in active_map[:limit]:
+        if isinstance(item, PronunciationRule):
+            replacement = item.replacement or "[no rewrite]"
+            extra = ""
+            if item.instruction:
+                extra = f" | instruction: {item.instruction}"
+            elif item.ipa:
+                extra = f" | IPA: {item.ipa}"
+            preview.append(f"{item.original} -> {replacement}{extra}")
+        else:
+            try:
+                _, replacement, original = item
+                preview.append(f"{original} -> {replacement}")
+            except Exception:
+                preview.append(repr(item))
+    return preview
+
+
 def openai_spoken_hint(entry: dict[str, Any], lang_data: dict[str, Any], language: str) -> str | None:
     openai_alias = lang_data.get("openai_alias")
     if isinstance(openai_alias, str) and openai_alias.strip():
@@ -1306,7 +1326,7 @@ def main() -> int:
     if pronunciation_lang_note:
         print(pronunciation_lang_note)
     if active_map:
-        preview = [f"{term} -> {repl}" for _, repl, term in active_map[:20]]
+        preview = preview_pronunciation_rules(active_map, limit=20)
         print(f"Aktiiviset replacementit (max20): {preview}")
     if args.renderer == "elevenlabs":
         if pronunciation_locators:
