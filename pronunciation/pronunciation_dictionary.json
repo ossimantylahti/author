@@ -22,11 +22,15 @@
         },
         "en-GB": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
-          "spoken": "Elias Korpela"
+          "spoken": "Elias Korpela",
+          "openai_alias": "EH-lee-ahs KOR-peh-lah",
+          "instruction": "Pronounce Elias Korpela as a Finnish name: EH-lee-ahs KOR-peh-lah. Stress the first syllable of both names."
         },
         "en-US": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
-          "spoken": "Elias Korpela"
+          "spoken": "Elias Korpela",
+          "openai_alias": "EH-lee-ahs KOR-peh-lah",
+          "instruction": "Pronounce Elias Korpela as a Finnish name: EH-lee-ahs KOR-peh-lah. Stress the first syllable of both names."
         },
         "es-MX": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
@@ -48,11 +52,15 @@
         },
         "en-GB": {
           "ipa": "ˈeliɑs",
-          "spoken": "Elias"
+          "spoken": "Elias",
+          "openai_alias": "EH-lee-ahs",
+          "instruction": "Pronounce Elias as a Finnish name: EH-lee-ahs, with stress on the first syllable. Do not pronounce it like the English name ee-LY-us."
         },
         "en-US": {
           "ipa": "ˈeliɑs",
-          "spoken": "Elias"
+          "spoken": "Elias",
+          "openai_alias": "EH-lee-ahs",
+          "instruction": "Pronounce Elias as a Finnish name: EH-lee-ahs, with stress on the first syllable. Do not pronounce it like the English name ee-LY-us."
         },
         "es-MX": {
           "ipa": "ˈeliɑs",
@@ -74,11 +82,15 @@
         },
         "en-GB": {
           "ipa": "ˈkorpelɑ",
-          "spoken": "Korpela"
+          "spoken": "Korpela",
+          "openai_alias": "KOR-peh-lah",
+          "instruction": "Pronounce Korpela as a Finnish surname: KOR-peh-lah, stress on the first syllable."
         },
         "en-US": {
           "ipa": "ˈkorpelɑ",
-          "spoken": "Korpela"
+          "spoken": "Korpela",
+          "openai_alias": "KOR-peh-lah",
+          "instruction": "Pronounce Korpela as a Finnish surname: KOR-peh-lah, stress on the first syllable."
         },
         "es-MX": {
           "ipa": "ˈkorpelɑ",
@@ -206,11 +218,15 @@
         },
         "en-GB": {
           "ipa": "Miksu",
-          "spoken": "Miksu"
+          "spoken": "Miksu",
+          "openai_alias": "MIK-soo",
+          "instruction": "Pronounce Miksu as Finnish: MIK-soo, stress on the first syllable."
         },
         "en-US": {
           "ipa": "Miksu",
-          "spoken": "Miksu"
+          "spoken": "Miksu",
+          "openai_alias": "MIK-soo",
+          "instruction": "Pronounce Miksu as Finnish: MIK-soo, stress on the first syllable."
         },
         "es-MX": {
           "ipa": "Miksu",
