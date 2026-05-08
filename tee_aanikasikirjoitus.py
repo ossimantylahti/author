@@ -494,6 +494,33 @@ def detect_language_name(text: str) -> str:
     if fi_score >= en_score and fi_score >= es_score: return "finnish"
     return "english" if en_score >= es_score else "spanish"
 
+
+def strip_non_prose_for_language_detection(text: str) -> str:
+    cleaned = re.sub(r"<[^>]+>", " ", text or "")
+    cleaned = re.sub(r"\b[a-z]+://\S+\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b[\w.\-]+@[\w.\-]+\b", " ", cleaned)
+    cleaned = re.sub(r"\b(?:[A-Za-z]:)?[/\\][^\s]+\b", " ", cleaned)
+    cleaned = re.sub(r"\b[\w.\-]+\.(?:xml|json|txt|docx|md|wav|mp3|m4a)\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^\s*[^:\n]{1,40}:\s*", " ", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def dominant_language_from_segments(segments: list[ScriptSegment]) -> str:
+    weighted_scores = {"finnish": 0.0, "english": 0.0, "spanish": 0.0}
+    for seg in segments:
+        prose = strip_non_prose_for_language_detection(seg.text)
+        if not prose:
+            continue
+        lang = detect_language_name(prose)
+        alpha_chars = len(re.findall(r"[A-Za-zÅÄÖåäö]", prose))
+        if alpha_chars == 0:
+            continue
+        weighted_scores[lang] += alpha_chars
+    if not any(weighted_scores.values()):
+        return "finnish"
+    return max(weighted_scores, key=weighted_scores.get)
+
 def infer_chat_emotion(line: str, emojis: list[str]) -> str:
     combo = "".join(emojis); lowered = line.lower()
     if any(x in combo for x in ["😂", "😏", "🙃", "😼"]) or "lol" in lowered: return "mocking"
@@ -707,29 +734,61 @@ def to_ssml_lines(
     openai_profile_variant: str | None = None,
 ) -> list[str]:
     out=[]
+    default_language = dominant_language_from_segments(segments)
+    print(f"[LANG] dominant default_language={default_language}")
+    alphabetic_fragment_count = 0
+    opposite_language_count = 0
+    suspicious_fragments: list[str] = []
     for i,row in enumerate(segments):
         speaker=resolve_voice_name(row.speaker, cfg.voices, cfg.aliases)
         emojis=EMOJI_RE.findall(row.text); spoken=EMOJI_RE.sub("",row.text).strip()
         is_chat=speaker.startswith("chat")
-        emotion, pace, tone = infer_fragment_delivery(spoken, speaker, "finnish", is_chat)
-        for chunk in split_plain_text(spoken):
-            language = detect_language_name(chunk)
-            emotion, pace, tone = infer_fragment_delivery(chunk, speaker, language, is_chat)
+        emotion, pace, tone = infer_fragment_delivery(spoken, speaker, default_language, is_chat)
+        for chunk_idx, chunk in enumerate(split_plain_text(spoken), start=1):
+            cleaned_chunk = strip_non_prose_for_language_detection(chunk)
+            alpha_chars = len(re.findall(r"[A-Za-zÅÄÖåäö]", cleaned_chunk))
+            detected_language = detect_language_name(cleaned_chunk) if cleaned_chunk else default_language
+            if alpha_chars < 80:
+                final_language = default_language
+                reason = f"short_fragment_alpha<{80}: inherited default_language"
+            elif detected_language != default_language and alpha_chars < 160:
+                final_language = default_language
+                reason = "weak_cross_language_signal: inherited default_language"
+            else:
+                final_language = detected_language
+                reason = "strong_evidence_from_fragment_text"
+
+            emotion, pace, tone = infer_fragment_delivery(chunk, speaker, final_language, is_chat)
             tts_chunk = chunk
-            if language == "finnish" and is_chat:
+            if final_language == "finnish" and is_chat:
                 tts_chunk = normalise_finnish_chat_pronunciation(tts_chunk)
-            if language == "finnish":
+            if final_language == "finnish":
                 tts_chunk = normalise_finnish_numbers_for_tts(tts_chunk)
-            profile = resolve_openai_profile(speaker, language, cfg, variant=openai_profile_variant)
+            profile = (
+                resolve_openai_profile(speaker, final_language, cfg, variant=openai_profile_variant)
+                or resolve_openai_profile(speaker, default_language, cfg, variant=openai_profile_variant)
+            )
             attrs = [
                 f'name="{html.escape(speaker, quote=True)}"',
-                f'language="{html.escape(language, quote=True)}"',
+                f'language="{html.escape(final_language, quote=True)}"',
                 f'emotion="{html.escape(emotion, quote=True)}"',
                 f'pace="{html.escape(pace, quote=True)}"',
                 f'tone="{html.escape(tone, quote=True)}"',
             ]
+            profile_name = profile.profile_id if profile else "-"
+            preview = re.sub(r"\s+", " ", chunk).strip()[:90]
+            print(
+                f"[LANG DEBUG] fragment={i+1}.{chunk_idx} speaker={speaker} text={preview!r} "
+                f"detected_language={detected_language} inherited/default_language={default_language} "
+                f"final_language={final_language} selected_profile={profile_name} reason={reason}"
+            )
+            if alpha_chars > 0:
+                alphabetic_fragment_count += 1
+                if (default_language == "english" and final_language == "finnish") or (default_language == "finnish" and final_language == "english"):
+                    opposite_language_count += 1
+                    suspicious_fragments.append(f"{i+1}.{chunk_idx} speaker={speaker} lang={final_language} text={preview!r}")
             if profile:
-                instructions = build_delivery_instructions(profile.instructions, tts_chunk, speaker, language, emotion, pace, tone, is_chat)
+                instructions = build_delivery_instructions(profile.instructions, tts_chunk, speaker, final_language, emotion, pace, tone, is_chat)
                 attrs.extend(
                     [
                         f'openai_profile="{html.escape(profile.profile_id, quote=True)}"',
@@ -740,6 +799,16 @@ def to_ssml_lines(
                 )
             out.append(f'<voice {" ".join(attrs)}>{html.escape(tts_chunk)}</voice>')
         if i < len(segments)-1: out.append(f'<break time="{INTER_LINE_BREAK}"/>')
+    if alphabetic_fragment_count > 0 and default_language in {"english", "finnish"}:
+        ratio = opposite_language_count / alphabetic_fragment_count
+        if ratio > 0.10:
+            print(
+                f"WARNING: Dominant language is {default_language} but {opposite_language_count}/{alphabetic_fragment_count} "
+                f"({ratio:.1%}) alphabetic fragments were marked as the opposite language.",
+                file=sys.stderr,
+            )
+            for frag in suspicious_fragments:
+                print(f"  suspicious: {frag}", file=sys.stderr)
     return out
 
 def final_voice_gate(ssml: str, narrators: dict[str, str]) -> str:
