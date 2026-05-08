@@ -32,6 +32,25 @@ NARRATOR_NAME = "Kertoja"
 MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
 
 
+def parse_bool_arg(value: str) -> bool:
+    v = (value or "").strip().lower()
+    if v in {"true", "yes", "1", "on"}:
+        return True
+    if v in {"false", "no", "0", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("Boolean value expected: true/false/yes/no/1/0/on/off")
+
+
+def resolve_code_path(path_arg: str, code_directory: Path) -> Path:
+    p = Path(path_arg).expanduser()
+    return p if p.is_absolute() else (code_directory / p)
+
+
+def resolve_work_path(path_arg: str, work_directory: Path) -> Path:
+    p = Path(path_arg).expanduser()
+    return p if p.is_absolute() else (work_directory / p)
+
+
 def load_narrators(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -401,9 +420,14 @@ def fallback_narrator_voice_id(narrators: dict[str, Any], renderer: str, languag
     return narrator_voice_id(narrators, NARRATOR_NAME, renderer, language)
 
 
-def resolve_voice_id_for_fragment(renderer: str, fragment_text: str, speaker: str, narrators: dict[str, Any], cli_voice_name: str | None, cli_voice_id: str | None) -> tuple[str, str]:
+def resolve_voice_id_for_fragment(renderer: str, fragment_text: str, speaker: str, narrators: dict[str, Any], cli_voice_name: str | None, cli_voice_id: str | None, use_multipolyfony: bool = False) -> tuple[str, str]:
     attrs = extract_voice_attrs(fragment_text)
     ssml_language = normalise_ssml_language(attrs.get("language"))
+    if not use_multipolyfony:
+        fallback_voice = fallback_narrator_voice_id(narrators, renderer, ssml_language) or fallback_narrator_voice_id(narrators, renderer)
+        if fallback_voice:
+            return fallback_voice, "single_voice_kertoja_mode"
+
     renderer_attr = attrs.get(f"{renderer}_voice")
     if renderer_attr:
         return renderer_attr, "ssml_renderer_attribute"
@@ -981,17 +1005,20 @@ def split_text_and_breaks(text: str) -> list[tuple[str, str | float]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ElevenLabs audiobook generator")
-    parser.add_argument("--input-file", required=True)
-    parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto, johon luodaan parts/ ja mahdollinen yhdistetty mp3")
-    parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE)
-    parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE)
-    parser.add_argument("--pronunciation-dictionary", default=None)
+    parser.add_argument("--input-file", required=True, help="SSML input. Suhteellinen polku ratkaistaan --work-directoryyn nähden.")
+    parser.add_argument("--out-dir", default="audio_parts", help="Hakemisto, johon luodaan parts/ ja mahdollinen yhdistetty mp3. Suhteellinen polku ratkaistaan --work-directoryyn nähden.")
+    parser.add_argument("--code-directory", default=".", help="Hakemisto tukitiedostoille (promptit, pronunciation/ jne).")
+    parser.add_argument("--work-directory", default=".", help="Hakemisto työaineistolle (input/output).")
+    parser.add_argument("--narrators-file", default=DEFAULT_NARRATORS_FILE, help="Suhteellinen polku ratkaistaan --code-directoryyn nähden.")
+    parser.add_argument("--pronunciation-file", default=DEFAULT_PRONUNCIATION_FILE, help="Suhteellinen polku ratkaistaan --code-directoryyn nähden.")
+    parser.add_argument("--pronunciation-dictionary", default=None, help="Suhteellinen polku ratkaistaan --code-directoryyn nähden.")
     parser.add_argument("--language", default=None, help="Pronunciation dictionary language/fallback language, not necessarily the spoken language of every SSML fragment.")
     parser.add_argument("--content", default=None, help="Luvun tunniste muodossa ACT.LUKU, esim. 2.8 (otsikkofragmenttia varten).")
     parser.add_argument("--chapter-title", default=None, help="Luvun otsikko; lisätään ensimmäiseksi fragmentiksi.")
     parser.add_argument("--generate-pls", action="store_true")
     parser.add_argument("--pls-out-dir", default="pronunciation_exports")
     parser.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper")
+    parser.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, help="true=käytä SSML/speaker-kohtaisia ääniä, false=pakota yksi Kertoja-ääni kaikille fragmenteille.")
     parser.add_argument("--voice-name", default=None, help="Deprecated fallback narrator name. Prefer SSML voice attributes and prompt_narrators.txt.")
     parser.add_argument("--voice-id", default=None, help="Deprecated fallback renderer voice id. Prefer SSML voice attributes and prompt_narrators.txt.")
     parser.add_argument("--model", choices=["v2", "v3"], default="v2")
@@ -1012,18 +1039,21 @@ def main() -> int:
     parser.add_argument("--merged-file", default=None, help="Yhdistetyn mp3:n tiedostonimi")
     args = parser.parse_args()
 
-    content = Path(args.input_file).read_text(encoding="utf-8").strip()
-    narrators_path = Path(args.narrators_file)
+    code_directory = Path(args.code_directory).expanduser()
+    work_directory = Path(args.work_directory).expanduser()
+    input_path = resolve_work_path(args.input_file, work_directory)
+    content = input_path.read_text(encoding="utf-8").strip()
+    narrators_path = resolve_code_path(args.narrators_file, code_directory)
     if not narrators_path.exists():
         print(f"Error: narrators file is required for fallback narrator resolution: {args.narrators_file}", file=sys.stderr)
         return 2
     narrators = load_narrators(narrators_path)
     ssml_languages = extract_ssml_languages(content)
     pronunciation_language, pronunciation_lang_note = resolve_pronunciation_language(args.language, ssml_languages)
-    pronunciation_locators = load_pronunciation_locators(Path(args.pronunciation_file))
+    pronunciation_locators = load_pronunciation_locators(resolve_code_path(args.pronunciation_file, code_directory))
     pronunciation_dictionary = None
     pronunciation_map: list[tuple[re.Pattern[str], str, str]] = []
-    dictionary_path = Path(args.pronunciation_dictionary) if args.pronunciation_dictionary else None
+    dictionary_path = resolve_code_path(args.pronunciation_dictionary, code_directory) if args.pronunciation_dictionary else None
     if dictionary_path and dictionary_path.exists():
         pronunciation_dictionary = load_pronunciation_dictionary(dictionary_path)
         pronunciation_map = build_pronunciation_map(pronunciation_dictionary, pronunciation_language)
@@ -1133,10 +1163,10 @@ def main() -> int:
         if remaining_credits is not None and remaining_credits < 10000:
             print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
 
-    out_dir = Path(args.out_dir)
+    out_dir = resolve_work_path(args.out_dir, work_directory)
     parts_dir = out_dir / "parts"
     parts_dir.mkdir(parents=True, exist_ok=True)
-    script_path = Path(args.input_file).resolve()
+    script_path = input_path.resolve()
     script_dir = script_path.parent
     chapter_prefix = script_path.stem
     part_no = 1
@@ -1151,7 +1181,7 @@ def main() -> int:
             before = pending[:notif_m.start()].strip()
             if before and not is_pause_only_ssml(before):
                 i = part_no
-                chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, before, speaker, narrators, args.voice_name, args.voice_id)
+                chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, before, speaker, narrators, args.voice_name, args.voice_id, args.use_multipolyfony)
                 out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
                 before_attrs = extract_voice_attrs(before)
                 print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source} ssml_language={normalise_ssml_language(before_attrs.get('language')) or 'unknown'}")
@@ -1193,7 +1223,7 @@ def main() -> int:
         if not chunk or is_pause_only_ssml(chunk):
             continue
 
-        chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, chunk, speaker, narrators, args.voice_name, args.voice_id)
+        chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, chunk, speaker, narrators, args.voice_name, args.voice_id, args.use_multipolyfony)
         if args.renderer == "elevenlabs":
             i = part_no
             out_path = parts_dir / f"{chapter_prefix}_{i:04d}.mp3"
@@ -1221,7 +1251,7 @@ def main() -> int:
                         frag_text = str(value)
                         if is_pause_only_ssml(frag_text):
                             continue
-                        resolved_voice_id, resolved_voice_source = resolve_voice_id_for_fragment(args.renderer, frag_text, speaker, narrators, args.voice_name, args.voice_id)
+                        resolved_voice_id, resolved_voice_source = resolve_voice_id_for_fragment(args.renderer, frag_text, speaker, narrators, args.voice_name, args.voice_id, args.use_multipolyfony)
                         clean_text = strip_ssml_tags(frag_text)
                         if not clean_text:
                             continue
@@ -1244,7 +1274,7 @@ def main() -> int:
     if not args.no_merge:
         part_files = sorted(parts_dir.glob("*.mp3"))
         if part_files:
-            merged_path = Path(args.merged_file) if args.merged_file else out_dir / f"{chapter_prefix}_fullchapter.mp3"
+            merged_path = resolve_work_path(args.merged_file, work_directory) if args.merged_file else out_dir / f"{chapter_prefix}_fullchapter.mp3"
             print(f"Yhdistetään osat tiedostoon: {merged_path}")
             merge_mp3_parts(parts_dir, merged_path)
         else:

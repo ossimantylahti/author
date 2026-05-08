@@ -585,6 +585,16 @@ def build_delivery_instructions(base_instructions: str, text: str, speaker: str,
             suffix = "Tämä on nopea chat-reaktio. Pidä delivery napakkana ja elävänä."
     elif language_name == "finnish":
         suffix = f"Pidä tämän fragmentin sävy {emotion} ja {tone}, rytmillä {pace}."
+    elif language_name == "english":
+        if is_chat:
+            suffix = f"This is a reactive chat comment. Read it briskly with a {tone} tone and {pace} pace."
+        else:
+            suffix = f"Keep this fragment {emotion} in mood, {tone} in tone, with a {pace} pace."
+    elif language_name == "spanish":
+        if is_chat:
+            suffix = f"Este comentario es una reacción de chat. Léelo con ritmo {pace} y tono {tone}."
+        else:
+            suffix = f"Mantén este fragmento con emoción {emotion}, tono {tone} y ritmo {pace}."
     return f"{base_instructions} {suffix}".strip()
 
 
@@ -857,18 +867,36 @@ def resolve_output_path(output_arg: str | None, content: str | None, input_path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
 
+
+def resolve_code_path(path_arg: str, code_directory: Path) -> Path:
+    p = Path(path_arg).expanduser()
+    return p if p.is_absolute() else (code_directory / p)
+
+
+def resolve_work_path(path_arg: str, work_directory: Path) -> Path:
+    p = Path(path_arg).expanduser()
+    return p if p.is_absolute() else (work_directory / p)
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
-    parser.add_argument("--input", required=True); parser.add_argument("--content", required=False)
-    parser.add_argument("--output", default=None); parser.add_argument("--narrators-file", default="prompt_narrators.txt")
+    parser.add_argument("--input", required=True, help="Syöte .docx. Suhteellinen polku ratkaistaan --work-directoryyn nähden.")
+    parser.add_argument("--content", required=False)
+    parser.add_argument("--output", default=None, help="Ulostulo XML/dir. Suhteellinen polku ratkaistaan --work-directoryyn nähden.")
+    parser.add_argument("--code-directory", default=".", help="Hakemisto tukitiedostoille (esim. prompt_narrators.txt).")
+    parser.add_argument("--work-directory", default=".", help="Hakemisto työaineistolle (input/output).")
+    parser.add_argument("--narrators-file", default="prompt_narrators.txt", help="Narrators JSON. Suhteellinen polku ratkaistaan --code-directoryyn nähden.")
     parser.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai")
     parser.add_argument("--debug-speakers", action="store_true")
     parser.add_argument("--openai-model", default="gpt-4.1-mini")
     parser.add_argument("--openai-profile-variant", default=None)
     args = parser.parse_args()
     try:
-        cfg=load_narrator_config(Path(args.narrators_file))
-        section,act_no,chapter_no,title=extract_section(Path(args.input), args.content)
+        code_directory = Path(args.code_directory).expanduser()
+        work_directory = Path(args.work_directory).expanduser()
+        narrators_path = resolve_code_path(args.narrators_file, code_directory)
+        input_path = resolve_work_path(args.input, work_directory)
+        cfg=load_narrator_config(narrators_path)
+        section,act_no,chapter_no,title=extract_section(input_path, args.content)
     except Exception as e:
         print(f"Virhe: {e}", file=sys.stderr); return 2
     print(f"Detected chapter title: {title}")
@@ -893,7 +921,8 @@ def main() -> int:
         to_ssml_lines(segments, cfg, openai_profile_variant=args.openai_profile_variant)
     ) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
-    out = resolve_output_path(args.output, args.content, Path(args.input), title)
+    output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
+    out = resolve_output_path(output_arg, args.content, input_path, title)
     print(f"Writing SSML to: {out}")
     out.write_text(ssml, encoding="utf-8")
     print(f"Kirjoitettu: {out}")
