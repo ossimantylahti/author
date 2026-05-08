@@ -18,19 +18,21 @@
       "pronunciations": {
         "fi-FI": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
-          "spoken": "Elias Korpela"
+          "spoken": "Elias Korpela",
+          "openai_alias": "E-li-as Kor-pe-la",
+          "instruction": "Lausu Elias Korpela suomalaisittain: E-li-as Kor-pe-la. Molemmissa nimissä paino on ensimmäisellä tavulla. Älä venytä Eliaksen keskimmäistä tavua."
         },
         "en-GB": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
           "spoken": "Elias Korpela",
-          "openai_alias": "EH-lee-ahs KOR-peh-lah",
-          "instruction": "Pronounce Elias Korpela as a Finnish name: EH-lee-ahs KOR-peh-lah. Stress the first syllable of both names."
+          "openai_alias": "EH-li-as KOR-pe-la",
+          "instruction": "Pronounce Elias Korpela as Finnish: EH-li-as KOR-pe-la. Elias has three short syllables, stress on EH, and the middle syllable must not be stretched. Korpela has stress on KOR, with a clear r and short 'pe' and 'la'. Do not anglicise either name."
         },
         "en-US": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
           "spoken": "Elias Korpela",
-          "openai_alias": "EH-lee-ahs KOR-peh-lah",
-          "instruction": "Pronounce Elias Korpela as a Finnish name: EH-lee-ahs KOR-peh-lah. Stress the first syllable of both names."
+          "openai_alias": "EH-li-as KOR-pe-la",
+          "instruction": "Pronounce Elias Korpela as Finnish: EH-li-as KOR-pe-la. Elias has three short syllables, stress on EH, and the middle syllable must not be stretched. Korpela has stress on KOR, with a clear r and short 'pe' and 'la'. Do not anglicise either name."
         },
         "es-MX": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
@@ -50,19 +52,21 @@
       "pronunciations": {
         "fi-FI": {
           "ipa": "ˈeliɑs",
-          "spoken": "Elias"
+          "spoken": "Elias",
+          "openai_alias": "E-li-as",
+          "instruction": "Lausu Elias suomalaisena nimenä: E-li-as. Kolme lyhyttä tavua, paino ensimmäisellä tavulla. Älä venytä keskimmäistä tavua."
         },
         "en-GB": {
           "ipa": "ˈeliɑs",
           "spoken": "Elias",
-          "openai_alias": "EH-lee-ahs",
-          "instruction": "Pronounce Elias as a Finnish name: EH-lee-ahs, with stress on the first syllable. Do not pronounce it like the English name ee-LY-us."
+          "openai_alias": "EH-li-as",
+          "instruction": "Pronounce Elias as a Finnish name with three short syllables: EH-li-as. Stress the first syllable. Keep the middle syllable short; do not stretch it. Do not pronounce it like the English name ee-LY-us or ee-LEE-ahs."
         },
         "en-US": {
           "ipa": "ˈeliɑs",
           "spoken": "Elias",
-          "openai_alias": "EH-lee-ahs",
-          "instruction": "Pronounce Elias as a Finnish name: EH-lee-ahs, with stress on the first syllable. Do not pronounce it like the English name ee-LY-us."
+          "openai_alias": "EH-li-as",
+          "instruction": "Pronounce Elias as a Finnish name with three short syllables: EH-li-as. Stress the first syllable. Keep the middle syllable short; do not stretch it. Do not pronounce it like the English name ee-LY-us or ee-LEE-ahs."
         },
         "es-MX": {
           "ipa": "ˈeliɑs",
@@ -82,19 +86,21 @@
       "pronunciations": {
         "fi-FI": {
           "ipa": "ˈkorpelɑ",
-          "spoken": "Korpela"
+          "spoken": "Korpela",
+          "openai_alias": "Kor-pe-la",
+          "instruction": "Lausu Korpela suomalaisena sukunimenä: Kor-pe-la. Paino ensimmäisellä tavulla. R kuuluu selvästi, ja tavut ovat lyhyet."
         },
         "en-GB": {
           "ipa": "ˈkorpelɑ",
           "spoken": "Korpela",
-          "openai_alias": "KOR-peh-lah",
-          "instruction": "Pronounce Korpela as a Finnish surname: KOR-peh-lah, stress on the first syllable."
+          "openai_alias": "KOR-pe-la",
+          "instruction": "Pronounce Korpela as a Finnish surname: KOR-pe-la. Stress the first syllable. Pronounce the r clearly. Keep 'pe' short and unstressed. Do not pronounce it like English kor-PEE-lah, kor-PELL-ah, or kor-puh-lah."
         },
         "en-US": {
           "ipa": "ˈkorpelɑ",
           "spoken": "Korpela",
-          "openai_alias": "KOR-peh-lah",
-          "instruction": "Pronounce Korpela as a Finnish surname: KOR-peh-lah, stress on the first syllable."
+          "openai_alias": "KOR-pe-la",
+          "instruction": "Pronounce Korpela as a Finnish surname: KOR-pe-la. Stress the first syllable. Pronounce the r clearly. Keep 'pe' short and unstressed. Do not pronounce it like English kor-PEE-lah, kor-PELL-ah, or kor-puh-lah."
         },
         "es-MX": {
           "ipa": "ˈkorpelɑ",
