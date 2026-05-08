@@ -52,6 +52,20 @@ def resolve_work_path(path_arg: str, work_directory: Path) -> Path:
     return p if p.is_absolute() else (work_directory / p)
 
 
+def resolve_unique_parts_dir(out_dir: Path) -> Path:
+    base_name = "parts"
+    candidate = out_dir / base_name
+    if not candidate.exists():
+        return candidate
+
+    i = 2
+    while True:
+        candidate = out_dir / f"{base_name}{i:03d}"
+        if not candidate.exists():
+            return candidate
+        i += 1
+
+
 def load_narrators(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -1327,8 +1341,9 @@ def main() -> int:
             print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
 
     out_dir = resolve_work_path(args.out_dir, work_directory)
-    parts_dir = out_dir / "parts"
+    parts_dir = resolve_unique_parts_dir(out_dir)
     parts_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Osat tallennetaan hakemistoon: {parts_dir}")
     script_path = input_path.resolve()
     script_dir = script_path.parent
     chapter_prefix = script_path.stem
