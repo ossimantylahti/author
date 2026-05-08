@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib import error, request
 import shutil
 import importlib
+from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -108,6 +109,32 @@ def load_pronunciation_dictionary(path: Path) -> dict[str, Any]:
     return data
 
 
+@dataclass
+class PronunciationRule:
+    pattern: re.Pattern[str]
+    original: str
+    replacement: str | None
+    instruction: str | None
+    ipa: str | None
+    origin_language: str | None
+
+
+def openai_spoken_hint(entry: dict[str, Any], lang_data: dict[str, Any], language: str) -> str | None:
+    openai_alias = lang_data.get("openai_alias")
+    if isinstance(openai_alias, str) and openai_alias.strip():
+        return openai_alias.strip()
+    alias = lang_data.get("alias")
+    if isinstance(alias, str) and alias.strip():
+        alias_clean = alias.strip()
+        graphemes = entry.get("graphemes", [])
+        if isinstance(graphemes, list) and all((not isinstance(g, str) or g.strip() != alias_clean) for g in graphemes):
+            return alias_clean
+    spoken_hint = lang_data.get("spoken_hint")
+    if isinstance(spoken_hint, str) and spoken_hint.strip():
+        return spoken_hint.strip()
+    return None
+
+
 def build_pronunciation_map(dictionary: dict[str, Any], language: str) -> list[tuple[re.Pattern[str], str, str]]:
     replacements: list[tuple[str, str]] = []
     for entry in dictionary.get("entries", []):
@@ -142,14 +169,56 @@ def apply_pronunciation_aliases(text: str, pronunciation_map: list[tuple[re.Patt
     return updated
 
 
-def apply_pronunciation_aliases_with_hits(text: str, pronunciation_map: list[tuple[re.Pattern[str], str, str]]) -> tuple[str, list[tuple[str, str]]]:
+def apply_pronunciation_aliases_with_hits(text: str, pronunciation_map: list[PronunciationRule]) -> tuple[str, list[dict[str, str]]]:
     updated = text
-    hits: list[tuple[str, str]] = []
-    for pattern, replacement, original in pronunciation_map:
-        updated, count = pattern.subn(replacement, updated)
-        if count > 0:
-            hits.append((original, replacement))
+    hits: list[dict[str, str]] = []
+    for rule in pronunciation_map:
+        if rule.replacement and rule.replacement != rule.original:
+            updated, count = rule.pattern.subn(rule.replacement, updated)
+        else:
+            count = len(rule.pattern.findall(updated))
+        if count > 0 and (rule.replacement or rule.instruction or rule.ipa):
+            hit: dict[str, str] = {"original": rule.original}
+            if rule.replacement:
+                hit["replacement"] = rule.replacement
+            if rule.instruction:
+                hit["instruction"] = rule.instruction
+            if rule.ipa:
+                hit["ipa"] = rule.ipa
+            if rule.origin_language:
+                hit["origin_language"] = rule.origin_language
+            hits.append(hit)
     return updated, hits
+
+
+def build_openai_pronunciation_map(dictionary: dict[str, Any], language: str) -> list[PronunciationRule]:
+    rules: list[PronunciationRule] = []
+    for entry in dictionary.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        graphemes = entry.get("graphemes", [])
+        pronunciations = entry.get("pronunciations", {})
+        lang_data = pronunciations.get(language, {}) if isinstance(pronunciations, dict) else {}
+        if not isinstance(graphemes, list) or not isinstance(lang_data, dict):
+            continue
+        replacement = openai_spoken_hint(entry, lang_data, language)
+        instruction = lang_data.get("instruction")
+        instruction = instruction.strip() if isinstance(instruction, str) and instruction.strip() else None
+        ipa = lang_data.get("ipa")
+        ipa = ipa.strip() if isinstance(ipa, str) and ipa.strip() else None
+        origin_language = entry.get("origin_language")
+        origin_language = origin_language.strip() if isinstance(origin_language, str) and origin_language.strip() else None
+        for g in graphemes:
+            if not isinstance(g, str) or not g.strip():
+                continue
+            term = g.strip()
+            if term.startswith("#") or term.startswith("@"):
+                regex = re.compile(rf"(?<![\w]){re.escape(term)}(?![\w])")
+            else:
+                regex = re.compile(rf"(?<![\w@#]){re.escape(term)}(?![\w])")
+            rules.append(PronunciationRule(regex, term, replacement, instruction, ipa, origin_language))
+    rules.sort(key=lambda x: len(x.original), reverse=True)
+    return rules
 
 
 def export_pls(dictionary: dict[str, Any], language: str, out_path: Path) -> None:
@@ -532,7 +601,7 @@ def detect_fragment_language(text: str, cli_language: str | None = None) -> str:
     return "en-GB"
 
 
-def build_openai_pronunciation_instruction(language: str | None, hits: list[tuple[str, str]]) -> str:
+def build_openai_pronunciation_instruction(language: str | None, hits: list[dict[str, str]]) -> str:
     base_by_language = {
         "fi-FI": "Lue teksti suomeksi. Noudata näitä lausumisohjeita täsmällisesti. Jos tekstissä on valmiiksi uudelleenkirjoitettu lausumismuoto, lue se sellaisenaan äläkä palauta alkuperäistä kirjoitusasua.",
         "en-GB": "Read this text in English. Follow the pronunciation instructions exactly. If a term has been rewritten into a spoken form, read the rewritten spoken form as written.",
@@ -544,7 +613,16 @@ def build_openai_pronunciation_instruction(language: str | None, hits: list[tupl
     if not hits:
         return base
     lines = ["Pronunciation overrides used in this fragment:"]
-    lines.extend([f'- "{original}" -> "{replacement}"' for original, replacement in hits[:30]])
+    for hit in hits[:30]:
+        original = hit.get("original", "")
+        replacement = hit.get("replacement")
+        instruction = hit.get("instruction")
+        if instruction:
+            lines.append(f'- "{original}": {instruction}')
+        elif replacement and replacement != original:
+            lines.append(f'- "{original}" -> "{replacement}"')
+        elif hit.get("ipa"):
+            lines.append(f'- "{original}": IPA {hit.get("ipa")}')
     return f"{base}\n" + "\n".join(lines)
 
 
@@ -871,8 +949,16 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
             f"OpenAI fragment debug: language={fragment_language}, voice={resolved_voice}, pronunciation_hits={len(pronunciation_hits)}"
         )
         if pronunciation_hits:
-            preview = ", ".join([f"{original} -> {replacement}" for original, replacement in pronunciation_hits[:5]])
-            print(f"OpenAI fragment pronunciation preview: {preview}")
+            preview_items: list[str] = []
+            for hit in pronunciation_hits[:5]:
+                original = hit.get("original", "")
+                replacement = hit.get("replacement")
+                instruction = hit.get("instruction")
+                item = f"{original} -> {replacement}" if replacement and replacement != original else f"{original} -> [no rewrite]"
+                if instruction:
+                    item += f", instruction: {instruction}"
+                preview_items.append(item)
+            print(f"OpenAI fragment pronunciation preview: {'; '.join(preview_items)}")
         with client.audio.speech.with_streaming_response.create(**payload) as response:
             response.stream_to_file(out_path)
         return resolved_voice
@@ -1114,15 +1200,28 @@ def main() -> int:
     pronunciation_language, pronunciation_lang_note = resolve_pronunciation_language(args.language, ssml_languages)
     pronunciation_locators = load_pronunciation_locators(resolve_pronunciation_locators_path(args.pronunciation_file, code_directory))
     pronunciation_dictionary = None
-    pronunciation_maps: dict[str, list[tuple[re.Pattern[str], str, str]]] = {}
+    pronunciation_maps: dict[str, list[Any]] = {}
     dictionary_path = resolve_code_path(args.pronunciation_dictionary, code_directory) if args.pronunciation_dictionary else None
     if dictionary_path and dictionary_path.exists():
         pronunciation_dictionary = load_pronunciation_dictionary(dictionary_path)
         for language in ("fi-FI", "en-GB", "en-US", "es-MX"):
-            pronunciation_maps[language] = build_pronunciation_map(pronunciation_dictionary, language)
+            if args.renderer == "openai":
+                pronunciation_maps[language] = build_openai_pronunciation_map(pronunciation_dictionary, language)
+            else:
+                pronunciation_maps[language] = build_pronunciation_map(pronunciation_dictionary, language)
     elif args.pronunciation_dictionary:
         print(f"Virhe: pronunciation dictionaryä ei löydy: {args.pronunciation_dictionary}", file=sys.stderr)
         return 2
+    if args.renderer == "openai" and pronunciation_maps:
+        all_rules = [r for rules in pronunciation_maps.values() for r in rules if isinstance(r, PronunciationRule)]
+        if all_rules and all((not r.replacement or r.replacement == r.original) and not r.instruction for r in all_rules):
+            example = all_rules[0]
+            example_replacement = example.replacement or example.original
+            print(
+                "Warning: pronunciation dictionary contains entries, but matching entries do not provide "
+                f"OpenAI-usable aliases or instructions. Example: {example.original} -> {example_replacement}. "
+                "Add openai_alias or instruction fields."
+            )
     try:
         ensure_renderer_installed(args.renderer)
         ensure_ffmpeg_installed()
