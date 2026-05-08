@@ -1,0 +1,9 @@
+<speak>
+  <voice name="Elias" language="english">
+    Elias Korpela looked at the screen. My name is Elias Korpela.
+  </voice>
+  <break time="0.8s"/>
+  <voice name="Elias" language="finnish">
+    Elias Korpela katsoi näyttöä. Minä olen Elias Korpela.
+  </voice>
+</speak>

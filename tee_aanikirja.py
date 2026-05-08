@@ -646,7 +646,17 @@ def build_openai_pronunciation_instruction(language: str | None, hits: list[dict
     base = base_by_language[resolved_lang]
     if not hits:
         return base
+    has_finnish_origin_hit = any((hit.get("origin_language") or "").strip() == "fi-FI" for hit in hits)
     lines = ["Pronunciation overrides used in this fragment:"]
+    if has_finnish_origin_hit:
+        if resolved_lang in {"en-GB", "en-US"}:
+            lines.append(
+                "Finnish proper names in this fragment must keep Finnish pronunciation, not English pronunciation. Use short Finnish syllables and stress the first syllable."
+            )
+        elif resolved_lang == "fi-FI":
+            lines.append(
+                "Erisnimet lausutaan suomalaisittain. Pidä tavut lyhyinä ja paino ensimmäisellä tavulla, jos ohjeessa niin sanotaan."
+            )
     for hit in hits[:30]:
         original = hit.get("original", "")
         replacement = hit.get("replacement")
@@ -658,6 +668,13 @@ def build_openai_pronunciation_instruction(language: str | None, hits: list[dict
         elif hit.get("ipa"):
             lines.append(f'- "{original}": IPA {hit.get("ipa")}')
     return f"{base}\n" + "\n".join(lines)
+
+
+def preview_openai_instructions_from_chunk(chunk: str, pronunciation_maps: dict[str, list[tuple[re.Pattern[str], str, str]]] | None, cli_language: str | None = None) -> str:
+    fragment_language = detect_fragment_language(chunk, cli_language)
+    fragment_map = (pronunciation_maps or {}).get(fragment_language, [])
+    _, pronunciation_hits = apply_pronunciation_aliases_with_hits(chunk, fragment_map)
+    return build_openai_pronunciation_instruction(fragment_language, pronunciation_hits)
 
 
 def merge_mp3_parts(out_dir: Path, merged_path: Path) -> None:
@@ -1344,6 +1361,16 @@ def main() -> int:
             print(f"- {gp}")
 
     if args.dry_run:
+        if args.renderer == "openai":
+            preview_text = ""
+            for _, chunk in chunks:
+                candidate = chunk.strip()
+                if candidate and not is_pause_only_ssml(candidate):
+                    preview_text = preview_openai_instructions_from_chunk(candidate, pronunciation_maps, args.language)
+                    break
+            if preview_text:
+                print("OpenAI instructions preview:")
+                print(preview_text[:1000])
         return 0
 
     api_key = ""
