@@ -154,6 +154,9 @@ def preview_pronunciation_rules(active_map: list[Any], limit: int = 20) -> list[
 
 
 def openai_spoken_hint(entry: dict[str, Any], lang_data: dict[str, Any], language: str) -> str | None:
+    use_alias = lang_data.get("openai_use_alias")
+    if use_alias is False:
+        return None
     openai_force_alias = lang_data.get("openai_force_alias")
     if isinstance(openai_force_alias, str) and openai_force_alias.strip():
         return openai_force_alias.strip()
@@ -641,44 +644,37 @@ def detect_fragment_language(text: str, cli_language: str | None = None) -> str:
 
 
 def build_elias_override_instruction(language: str | None) -> str:
-    if language == "fi-FI":
+    if language in {"en-GB", "en-US"}:
         return (
-            'Nimi "Elias" lausutaan suomalaisittain: E-li-as. Kolme hyvin lyhyttä tavua. '
-            'Paino ensimmäisellä tavulla. Älä venytä li-tavua. Älä lausu nimeä englanniksi.'
+            'Pronounce "Elias" as a Finnish proper name, close to "EL-yahs", with stress at the start. '
+            "Do not spell it out."
         )
-    return (
-        'For the name "Elias", ignore the default English pronunciation. Pronounce it as a Finnish name: '
-        'EH-li-as. Three very short syllables. Stress the first syllable EH. Do not stretch the middle '
-        'syllable. Never say ee-LY-us, ee-LEE-ahs, or E-lai-as.'
-    )
+    return ""
 
 
 def apply_openai_pronunciation_overrides(text: str, language: str | None, hits: list[dict[str, str]]) -> list[dict[str, str]]:
     updated_hits = list(hits)
     if re.search(r"(?<![\w@#])Elias(?![\w])", text, flags=re.IGNORECASE):
+        if language == "fi-FI":
+            return updated_hits
+        if language not in {"en-GB", "en-US"}:
+            return updated_hits
+        instruction = build_elias_override_instruction(language)
+        if not instruction:
+            return updated_hits
         has_elias_hit = any((hit.get("original", "").strip().lower() == "elias" for hit in updated_hits))
         if not has_elias_hit:
             updated_hits.append({
                 "original": "Elias",
-                "replacement": "EH-li-ass",
-                "instruction": build_elias_override_instruction(language),
+                "instruction": instruction,
                 "origin_language": "fi-FI",
             })
         else:
             for hit in updated_hits:
                 if (hit.get("original", "").strip().lower() == "elias"):
-                    hit.setdefault("replacement", "EH-li-ass")
-                    hit["instruction"] = build_elias_override_instruction(language)
+                    hit.pop("replacement", None)
+                    hit["instruction"] = instruction
                     hit.setdefault("origin_language", "fi-FI")
-        for hit in updated_hits:
-            if (hit.get("original", "").strip().lower() == "elias"):
-                print(
-                    "Pronunciation override hit:\n"
-                    "  original: Elias\n"
-                    f"  replacement/openai_alias: {hit.get('replacement', '[none]')}\n"
-                    f"  instruction: {hit.get('instruction', '[none]')}\n"
-                    f"  fragment_language: {language or 'en-GB'}"
-                )
     return updated_hits
 def build_openai_pronunciation_instruction(language: str | None, hits: list[dict[str, str]]) -> str:
     base_by_language = {
@@ -1032,6 +1028,11 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
         rewritten, pronunciation_hits = apply_pronunciation_aliases_with_hits(text, fragment_map)
         pronunciation_hits = apply_openai_pronunciation_overrides(text, fragment_language, pronunciation_hits)
         clean_text = strip_ssml_tags(rewritten)
+        if re.search(r"\b(E-li-as|EH-li-as|EH-li-ass|E-li-ass)\b", clean_text):
+            print(
+                'WARNING: OpenAI input contains a hyphenated Elias alias. This may cause TTS to spell the name. '
+                'Use plain "Elias" plus natural-language instruction instead.'
+            )
         if not clean_text:
             return resolved_voice
         out_path.parent.mkdir(parents=True, exist_ok=True)
