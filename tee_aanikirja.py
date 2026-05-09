@@ -154,6 +154,9 @@ def preview_pronunciation_rules(active_map: list[Any], limit: int = 20) -> list[
 
 
 def openai_spoken_hint(entry: dict[str, Any], lang_data: dict[str, Any], language: str) -> str | None:
+    openai_force_alias = lang_data.get("openai_force_alias")
+    if isinstance(openai_force_alias, str) and openai_force_alias.strip():
+        return openai_force_alias.strip()
     openai_alias = lang_data.get("openai_alias")
     if isinstance(openai_alias, str) and openai_alias.strip():
         return openai_alias.strip()
@@ -635,6 +638,48 @@ def detect_fragment_language(text: str, cli_language: str | None = None) -> str:
     return "en-GB"
 
 
+
+
+def build_elias_override_instruction(language: str | None) -> str:
+    if language == "fi-FI":
+        return (
+            'Nimi "Elias" lausutaan suomalaisittain: E-li-as. Kolme hyvin lyhyttä tavua. '
+            'Paino ensimmäisellä tavulla. Älä venytä li-tavua. Älä lausu nimeä englanniksi.'
+        )
+    return (
+        'For the name "Elias", ignore the default English pronunciation. Pronounce it as a Finnish name: '
+        'EH-li-as. Three very short syllables. Stress the first syllable EH. Do not stretch the middle '
+        'syllable. Never say ee-LY-us, ee-LEE-ahs, or E-lai-as.'
+    )
+
+
+def apply_openai_pronunciation_overrides(text: str, language: str | None, hits: list[dict[str, str]]) -> list[dict[str, str]]:
+    updated_hits = list(hits)
+    if re.search(r"(?<![\w@#])Elias(?![\w])", text, flags=re.IGNORECASE):
+        has_elias_hit = any((hit.get("original", "").strip().lower() == "elias" for hit in updated_hits))
+        if not has_elias_hit:
+            updated_hits.append({
+                "original": "Elias",
+                "replacement": "EH-li-ass",
+                "instruction": build_elias_override_instruction(language),
+                "origin_language": "fi-FI",
+            })
+        else:
+            for hit in updated_hits:
+                if (hit.get("original", "").strip().lower() == "elias"):
+                    hit.setdefault("replacement", "EH-li-ass")
+                    hit["instruction"] = build_elias_override_instruction(language)
+                    hit.setdefault("origin_language", "fi-FI")
+        for hit in updated_hits:
+            if (hit.get("original", "").strip().lower() == "elias"):
+                print(
+                    "Pronunciation override hit:\n"
+                    "  original: Elias\n"
+                    f"  replacement/openai_alias: {hit.get('replacement', '[none]')}\n"
+                    f"  instruction: {hit.get('instruction', '[none]')}\n"
+                    f"  fragment_language: {language or 'en-GB'}"
+                )
+    return updated_hits
 def build_openai_pronunciation_instruction(language: str | None, hits: list[dict[str, str]]) -> str:
     base_by_language = {
         "fi-FI": "Lue teksti suomeksi. Noudata näitä lausumisohjeita täsmällisesti. Jos tekstissä on valmiiksi uudelleenkirjoitettu lausumismuoto, lue se sellaisenaan äläkä palauta alkuperäistä kirjoitusasua.",
@@ -674,6 +719,7 @@ def preview_openai_instructions_from_chunk(chunk: str, pronunciation_maps: dict[
     fragment_language = detect_fragment_language(chunk, cli_language)
     fragment_map = (pronunciation_maps or {}).get(fragment_language, [])
     _, pronunciation_hits = apply_pronunciation_aliases_with_hits(chunk, fragment_map)
+    pronunciation_hits = apply_openai_pronunciation_overrides(chunk, fragment_language, pronunciation_hits)
     return build_openai_pronunciation_instruction(fragment_language, pronunciation_hits)
 
 
@@ -984,6 +1030,7 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
         fragment_language = detect_fragment_language(text, cli_language)
         fragment_map = (pronunciation_maps or {}).get(fragment_language, [])
         rewritten, pronunciation_hits = apply_pronunciation_aliases_with_hits(text, fragment_map)
+        pronunciation_hits = apply_openai_pronunciation_overrides(text, fragment_language, pronunciation_hits)
         clean_text = strip_ssml_tags(rewritten)
         if not clean_text:
             return resolved_voice
