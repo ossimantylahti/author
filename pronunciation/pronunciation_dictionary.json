@@ -19,23 +19,26 @@
         "fi-FI": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
           "spoken": "Elias Korpela",
-          "openai_alias": "E-li-as Kor-pe-la",
-          "instruction": "Lausu Elias Korpela suomalaisittain: E-li-as Kor-pe-la. Molemmissa nimissä paino on ensimmäisellä tavulla. Älä venytä Eliaksen keskimmäistä tavua.",
-          "openai_force_alias": "E-li-ass Kor-pe-la"
+          "openai_alias": null,
+          "instruction": "",
+          "openai_force_alias": "E-li-ass Kor-pe-la",
+          "openai_use_alias": false
         },
         "en-GB": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
           "spoken": "Elias Korpela",
-          "openai_alias": "EH-li-as KOR-pe-la",
-          "instruction": "Pronounce Elias Korpela as Finnish: EH-li-as KOR-pe-la. Elias has three short syllables, stress on EH, and the middle syllable must not be stretched. Korpela has stress on KOR, with a clear r and short 'pe' and 'la'. Do not anglicise either name.",
-          "openai_force_alias": "EH-li-ass KOR-pe-la"
+          "openai_alias": null,
+          "instruction": "Pronounce \"Elias Korpela\" as a Finnish name. Elias is close to EL-yahs, not spelled out. Korpela is close to KOR-peh-lah, with stress at the start.",
+          "openai_force_alias": "EH-li-ass KOR-pe-la",
+          "openai_use_alias": false
         },
         "en-US": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
           "spoken": "Elias Korpela",
-          "openai_alias": "EH-li-as KOR-pe-la",
-          "instruction": "Pronounce Elias Korpela as Finnish: EH-li-as KOR-pe-la. Elias has three short syllables, stress on EH, and the middle syllable must not be stretched. Korpela has stress on KOR, with a clear r and short 'pe' and 'la'. Do not anglicise either name.",
-          "openai_force_alias": "EH-li-ass KOR-pe-la"
+          "openai_alias": null,
+          "instruction": "Pronounce \"Elias Korpela\" as a Finnish name. Elias is close to EL-yahs, not spelled out. Korpela is close to KOR-peh-lah, with stress at the start.",
+          "openai_force_alias": "EH-li-ass KOR-pe-la",
+          "openai_use_alias": false
         },
         "es-MX": {
           "ipa": "ˈeliɑs ˈkorpelɑ",
@@ -56,23 +59,26 @@
         "fi-FI": {
           "ipa": "ˈeliɑs",
           "spoken": "Elias",
-          "openai_alias": "E-li-as",
-          "instruction": "Lausu Elias suomalaisena nimenä: E-li-as. Kolme lyhyttä tavua, paino ensimmäisellä tavulla. Älä venytä keskimmäistä tavua.",
-          "openai_force_alias": "E-li-ass"
+          "openai_alias": null,
+          "instruction": "",
+          "openai_force_alias": "E-li-ass",
+          "openai_use_alias": false
         },
         "en-GB": {
           "ipa": "ˈeliɑs",
           "spoken": "Elias",
-          "openai_alias": "EH-li-as",
-          "instruction": "Pronounce Elias as a Finnish name with three short syllables: EH-li-as. Stress the first syllable. Keep the middle syllable short; do not stretch it. Do not pronounce it like the English name ee-LY-us or ee-LEE-ahs.",
-          "openai_force_alias": "EH-li-ass"
+          "openai_alias": null,
+          "instruction": "Pronounce Elias as a Finnish proper name, close to EL-yahs, with the stress at the start. Do not spell it out.",
+          "openai_force_alias": "EH-li-ass",
+          "openai_use_alias": false
         },
         "en-US": {
           "ipa": "ˈeliɑs",
           "spoken": "Elias",
-          "openai_alias": "EH-li-as",
-          "instruction": "Pronounce Elias as a Finnish name with three short syllables: EH-li-as. Stress the first syllable. Keep the middle syllable short; do not stretch it. Do not pronounce it like the English name ee-LY-us or ee-LEE-ahs.",
-          "openai_force_alias": "EH-li-ass"
+          "openai_alias": null,
+          "instruction": "Pronounce Elias as a Finnish proper name, close to EL-yahs, with the stress at the start. Do not spell it out.",
+          "openai_force_alias": "EH-li-ass",
+          "openai_use_alias": false
         },
         "es-MX": {
           "ipa": "ˈeliɑs",
