@@ -100,19 +100,22 @@
           "ipa": "ˈkorpelɑ",
           "spoken": "Korpela",
           "openai_alias": "Kor-pe-la",
-          "instruction": "Lausu Korpela suomalaisena sukunimenä: Kor-pe-la. Paino ensimmäisellä tavulla. R kuuluu selvästi, ja tavut ovat lyhyet."
+          "instruction": "Lausu Korpela suomalaisena sukunimenä: Kor-pe-la. Paino ensimmäisellä tavulla. R kuuluu selvästi, ja tavut ovat lyhyet.",
+          "openai_use_alias": false
         },
         "en-GB": {
           "ipa": "ˈkorpelɑ",
           "spoken": "Korpela",
           "openai_alias": "KOR-pe-la",
-          "instruction": "Pronounce Korpela as a Finnish surname: KOR-pe-la. Stress the first syllable. Pronounce the r clearly. Keep 'pe' short and unstressed. Do not pronounce it like English kor-PEE-lah, kor-PELL-ah, or kor-puh-lah."
+          "instruction": "Pronounce Korpela as a Finnish surname: KOR-pe-la. Stress the first syllable. Pronounce the r clearly. Keep 'pe' short and unstressed. Do not pronounce it like English kor-PEE-lah, kor-PELL-ah, or kor-puh-lah.",
+          "openai_use_alias": false
         },
         "en-US": {
           "ipa": "ˈkorpelɑ",
           "spoken": "Korpela",
           "openai_alias": "KOR-pe-la",
-          "instruction": "Pronounce Korpela as a Finnish surname: KOR-pe-la. Stress the first syllable. Pronounce the r clearly. Keep 'pe' short and unstressed. Do not pronounce it like English kor-PEE-lah, kor-PELL-ah, or kor-puh-lah."
+          "instruction": "Pronounce Korpela as a Finnish surname: KOR-pe-la. Stress the first syllable. Pronounce the r clearly. Keep 'pe' short and unstressed. Do not pronounce it like English kor-PEE-lah, kor-PELL-ah, or kor-puh-lah.",
+          "openai_use_alias": false
         },
         "es-MX": {
           "ipa": "ˈkorpelɑ",
@@ -262,19 +265,22 @@
       "pronunciations": {
         "fi-FI": {
           "ipa": "Miksu",
-          "spoken": "Miksu"
+          "spoken": "Miksu",
+          "openai_use_alias": false
         },
         "en-GB": {
           "ipa": "Miksu",
           "spoken": "Miksu",
           "openai_alias": "MIK-soo",
-          "instruction": "Pronounce Miksu as Finnish: MIK-soo, stress on the first syllable."
+          "instruction": "Pronounce Miksu as Finnish: MIK-soo, stress on the first syllable.",
+          "openai_use_alias": false
         },
         "en-US": {
           "ipa": "Miksu",
           "spoken": "Miksu",
           "openai_alias": "MIK-soo",
-          "instruction": "Pronounce Miksu as Finnish: MIK-soo, stress on the first syllable."
+          "instruction": "Pronounce Miksu as Finnish: MIK-soo, stress on the first syllable.",
+          "openai_use_alias": false
         },
         "es-MX": {
           "ipa": "Miksu",
@@ -428,19 +434,22 @@
           "ipa": "Koneko-chan",
           "spoken": "Koneko-chan",
           "openai_alias": "Koneko-chan",
-          "instruction": "Pronounce Koneko-chan as Finnish."
+          "instruction": "Pronounce Koneko-chan as Finnish.",
+          "openai_use_alias": false
         },
         "en-US": {
           "ipa": "Koneko-chan",
           "spoken": "Koneko-chan",
           "openai_alias": "Koneko-chan",
-          "instruction": "Pronounce Koneko-chan as Finnish."
+          "instruction": "Pronounce Koneko-chan as Finnish.",
+          "openai_use_alias": false
         },
         "es-MX": {
           "ipa": "Koneko-chan",
           "spoken": "Koneko-chan",
           "openai_alias": "Koneko-chan",
-          "instruction": "Pronounce Koneko-chan as Finnish."
+          "instruction": "Pronounce Koneko-chan as Finnish.",
+          "openai_use_alias": false
         }
       }
     },

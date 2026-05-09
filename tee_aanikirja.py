@@ -154,8 +154,7 @@ def preview_pronunciation_rules(active_map: list[Any], limit: int = 20) -> list[
 
 
 def openai_spoken_hint(entry: dict[str, Any], lang_data: dict[str, Any], language: str) -> str | None:
-    use_alias = lang_data.get("openai_use_alias")
-    if use_alias is False:
+    if not should_use_openai_alias(entry, lang_data):
         return None
     openai_force_alias = lang_data.get("openai_force_alias")
     if isinstance(openai_force_alias, str) and openai_force_alias.strip():
@@ -173,6 +172,25 @@ def openai_spoken_hint(entry: dict[str, Any], lang_data: dict[str, Any], languag
     if isinstance(spoken_hint, str) and spoken_hint.strip():
         return spoken_hint.strip()
     return None
+
+
+def should_use_openai_alias(entry: dict[str, Any], lang_data: dict[str, Any]) -> bool:
+    use_alias = lang_data.get("openai_use_alias")
+    if use_alias is False:
+        return False
+    openai_force_alias = lang_data.get("openai_force_alias")
+    if isinstance(openai_force_alias, str) and openai_force_alias.strip():
+        return True
+    openai_alias = lang_data.get("openai_alias")
+    alias_clean = openai_alias.strip() if isinstance(openai_alias, str) and openai_alias.strip() else None
+    origin_language = entry.get("origin_language")
+    if origin_language == "fi-FI" and alias_clean and "-" in alias_clean:
+        return False
+    alias = lang_data.get("alias")
+    alias_clean = alias.strip() if isinstance(alias, str) and alias.strip() else None
+    if origin_language == "fi-FI" and alias_clean and "-" in alias_clean:
+        return False
+    return bool(openai_alias or alias or lang_data.get("spoken_hint"))
 
 
 def build_pronunciation_map(dictionary: dict[str, Any], language: str) -> list[tuple[re.Pattern[str], str, str]]:
@@ -1028,11 +1046,18 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
         rewritten, pronunciation_hits = apply_pronunciation_aliases_with_hits(text, fragment_map)
         pronunciation_hits = apply_openai_pronunciation_overrides(text, fragment_language, pronunciation_hits)
         clean_text = strip_ssml_tags(rewritten)
-        if re.search(r"\b(E-li-as|EH-li-as|EH-li-ass|E-li-ass)\b", clean_text):
-            print(
-                'WARNING: OpenAI input contains a hyphenated Elias alias. This may cause TTS to spell the name. '
-                'Use plain "Elias" plus natural-language instruction instead.'
-            )
+        for rule in fragment_map:
+            if (
+                isinstance(rule, PronunciationRule)
+                and rule.origin_language == "fi-FI"
+                and rule.replacement
+                and "-" in rule.replacement
+                and re.search(rf"(?<![\\w@#]){re.escape(rule.replacement)}(?![\\w])", clean_text)
+            ):
+                print(
+                    f"WARNING: OpenAI input contains hyphenated Finnish pronunciation alias '{rule.replacement}' for '{rule.original}'. "
+                    "This may cause TTS to spell or over-segment the name. Use the original name plus natural-language instruction instead."
+                )
         if not clean_text:
             return resolved_voice
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1047,6 +1072,8 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
         print(
             f"OpenAI fragment debug: language={fragment_language}, voice={resolved_voice}, pronunciation_hits={len(pronunciation_hits)}"
         )
+        print(f"OpenAI final text: {clean_text}")
+        print(f"OpenAI final instructions: {payload['instructions']}")
         if pronunciation_hits:
             preview_items: list[str] = []
             for hit in pronunciation_hits[:5]:
@@ -1231,7 +1258,7 @@ def pop_leading_break_seconds(text: str) -> tuple[str, float | None]:
     return remaining, float(m.group(1))
 
 
-def split_text_and_breaks(text: str) -> list[tuple[str, str | float]]:
+def split_text_and_breaks(text: str, default_pause_s: float = 0.2) -> list[tuple[str, str | float]]:
     parts: list[tuple[str, str | float]] = []
     break_re = re.compile(r'<break\b([^>]*)/?>', flags=re.IGNORECASE)
     pos = 0
@@ -1241,7 +1268,7 @@ def split_text_and_breaks(text: str) -> list[tuple[str, str | float]]:
             parts.append(("text", before.strip()))
         attrs = m.group(1) or ""
         tm = re.search(r'time="([0-9.]+)s"', attrs, flags=re.IGNORECASE)
-        pause_s = float(tm.group(1)) if tm else 0.2
+        pause_s = float(tm.group(1)) if tm else default_pause_s
         parts.append(("break", pause_s))
         pos = m.end()
     tail = text[pos:]
@@ -1284,6 +1311,9 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-merge", action="store_true", help="Älä yhdistä osia lopuksi")
     parser.add_argument("--merged-file", default=None, help="Yhdistetyn mp3:n tiedostonimi")
+    parser.add_argument("--dialogue-to-narrator-pause-ms", type=int, default=200)
+    parser.add_argument("--narrator-to-dialogue-pause-ms", type=int, default=200)
+    parser.add_argument("--default-inline-pause-ms", type=int, default=200)
     args = parser.parse_args()
 
     code_directory = Path(args.code_directory).expanduser()
@@ -1486,7 +1516,15 @@ def main() -> int:
             pending = pending[notif_m.end():]
             pending, pause_s = pop_leading_break_seconds(pending)
             if pause_s is None:
-                pause_s = 0.2
+                is_dialogue_to_narrator = speaker != NARRATOR_NAME
+                pause_s = (args.dialogue_to_narrator_pause_ms if is_dialogue_to_narrator else args.narrator_to_dialogue_pause_ms) / 1000.0
+                print(
+                    "Pause decision:\n"
+                    f"  previous_speaker: {speaker}\n"
+                    f"  next_speaker: unknown\n"
+                    "  boundary_type: voice_change_same_paragraph\n"
+                    f"  pause_ms: {int(pause_s * 1000)}"
+                )
             out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
             render_silence(out_path, pause_s)
             print(f"[{part_no}] -> {out_path} (silence {pause_s:.2f}s)")
@@ -1514,7 +1552,7 @@ def main() -> int:
                 synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                 part_no += 1
             else:
-                for frag_type, value in split_text_and_breaks(chunk):
+                for frag_type, value in split_text_and_breaks(chunk, default_pause_s=args.default_inline_pause_ms / 1000.0):
                     out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
                     if frag_type == "break":
                         pause_s = float(value)

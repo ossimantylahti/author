@@ -43,7 +43,7 @@
           "profile_id": "narrator-onyx-en",
           "voice": "onyx",
           "model": "gpt-4o-mini-tts",
-          "instructions": "Read in English as a calm, literary Nordic crime narrator. Use natural sentence rhythm. Avoid overacting. Keep the tone restrained, dry and slightly sombre. Do not sound like a newsreader or a synthetic assistant."
+          "instructions": "Read in English as a calm, literary Nordic crime narrator. Use natural sentence rhythm and a restrained, dry, slightly sombre tone. Allow a little more narrative engagement than a neutral reading: subtly mark tension, irony, unease and emotional shifts when the prose calls for it. Keep the performance controlled and literary. Do not overact, do not become melodramatic, and do not sound like a newsreader or a synthetic assistant."
         },
         "es": {
           "profile_id": "narrador-onyx-es",
