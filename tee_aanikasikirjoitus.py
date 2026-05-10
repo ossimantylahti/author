@@ -35,6 +35,7 @@ SINGLE_VOICE_MAX_FRAGMENT_LEN = 4095
 INTER_CHUNK_BREAK = "0.4s"
 INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF\U000024C2-\U0001F251]+", flags=re.UNICODE)
+CHAT_LINE_RE = re.compile(r"^\s*\[([^\]\n]{1,64})\]\s*:\s*(.+?)\s*$")
 
 SPEECH_VERB_ROOTS = {
     "finnish": ["sano", "kysy", "vasta", "huuda", "totea", "juttele", "mainitse", "kommentoi", "kuiska", "karju", "mumise", "lausu", "selitä", "ilmoita", "myönnä", "kiistä", "toista", "mutise", "hihku", "naurahda", "neuvo", "täydentä", "jatka", "lisä", "toka", "huikka", "kerro"],
@@ -90,6 +91,28 @@ class ScriptSegment:
     speaker: str
     text: str
     confidence: float = 1.0
+
+
+@dataclass
+class ChatLine:
+    nickname: str
+    message: str
+    raw: str
+
+
+def clean_chat_nickname(nickname: str) -> str:
+    nick = nickname.strip().strip("[]").strip("_")
+    return nick or "anonymous"
+
+
+def parse_chat_line(line: str) -> ChatLine | None:
+    m = CHAT_LINE_RE.match(line or "")
+    if not m:
+        return None
+    message = (m.group(2) or "").strip()
+    if not message:
+        return None
+    return ChatLine(nickname=clean_chat_nickname(m.group(1)), message=message, raw=line)
 
 
 def normalise_alias_key(value: str) -> str:
@@ -533,6 +556,16 @@ def dominant_language_from_segments(segments: list[ScriptSegment]) -> str:
 
 def infer_chat_emotion(line: str, emojis: list[str]) -> str:
     combo = "".join(emojis); lowered = line.lower()
+    if any(x in lowered for x in ["wtf", "what the fuck", "holy shit", "jesus", "can't be real"]):
+        return "shocked"
+    if any(x in lowered for x in ["clip", "content", "let's go", "drop it", "🔥"]):
+        return "excited"
+    if any(x in lowered for x in ["lol", "lmao", "bro", "😂", "💀"]):
+        return "mocking"
+    if any(x in lowered for x in ["end the stream", "call police", "stop", "don't"]):
+        return "urgent"
+    if "?" in line:
+        return "questioning"
     if any(x in combo for x in ["😂", "😏", "🙃", "😼"]) or "lol" in lowered: return "mocking"
     if any(x in combo for x in ["😨", "😱", "😰", "😬"]) or "apua" in lowered: return "fearful"
     if any(x in combo for x in ["😡", "🤬", "👿"]): return "angry"
@@ -545,6 +578,9 @@ def infer_pace_and_tone(emotion: str, is_chat: bool) -> tuple[str, str]:
     elif emotion_key in {"fearful","pelokas"}: pace,tone="medium","tense"
     elif emotion_key in {"excited","innostunut","riemukas"}: pace,tone="fast","bright"
     elif emotion_key in {"mocking","ironinen"}: pace,tone="medium","playful"
+    elif emotion_key in {"shocked"}: pace,tone="fast","sharp"
+    elif emotion_key in {"urgent"}: pace,tone="fast","alarmed"
+    elif emotion_key in {"questioning"}: pace,tone="fast","questioning"
     elif emotion_key in {"surullinen","sad"}: pace,tone="slow","soft"
     if is_chat and pace=="medium" and tone=="neutral": pace,tone="fast","light"
     return pace,tone
@@ -754,6 +790,50 @@ def build_single_voice_segments(section: str, content: str | None, title: str) -
     return segments
 
 
+def inject_chat_segments(base_segments: list[ScriptSegment]) -> list[ScriptSegment]:
+    out: list[ScriptSegment] = []
+    in_chat_block = False
+    for seg in base_segments:
+        if seg.type not in {"narration", "dialogue"}:
+            out.append(seg)
+            continue
+        lines = [ln for ln in seg.text.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        text_buffer: list[str] = []
+        for line in lines:
+            chat = parse_chat_line(line)
+            if chat:
+                if text_buffer:
+                    if in_chat_block:
+                        out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification_end"))
+                        out.append(ScriptSegment(segment_id=0, type="narration", speaker=NARRATOR_NAME, text="", confidence=1.0))
+                        in_chat_block = False
+                    out.append(ScriptSegment(segment_id=0, type=seg.type, speaker=seg.speaker, text="\n".join(text_buffer)))
+                    text_buffer = []
+                if not in_chat_block:
+                    out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification_lead"))
+                    out.append(ScriptSegment(segment_id=0, type="narration", speaker=NARRATOR_NAME, text="", confidence=1.0))
+                    in_chat_block = True
+                out.append(ScriptSegment(segment_id=0, type="chat_nickname", speaker="chat", text=chat.nickname))
+                out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification"))
+                out.append(ScriptSegment(segment_id=0, type="chat_message", speaker="chat", text=chat.message))
+            else:
+                if in_chat_block:
+                    out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification_end"))
+                    out.append(ScriptSegment(segment_id=0, type="narration", speaker=NARRATOR_NAME, text="", confidence=1.0))
+                    in_chat_block = False
+                text_buffer.append(line)
+        if text_buffer:
+            out.append(ScriptSegment(segment_id=0, type=seg.type, speaker=seg.speaker, text="\n".join(text_buffer)))
+    if in_chat_block:
+        out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification_end"))
+    final: list[ScriptSegment] = []
+    for i, seg in enumerate(out, start=1):
+        final.append(ScriptSegment(segment_id=i, type=seg.type, speaker=seg.speaker, text=seg.text, confidence=seg.confidence))
+    return final
+
+
 def split_plain_text(text: str, limit: int = MAX_FRAGMENT_LEN) -> list[str]:
     text = text.strip()
     if len(text) <= limit: return [text] if text else []
@@ -860,9 +940,17 @@ def to_ssml_lines(
     opposite_language_count = 0
     suspicious_fragments: list[str] = []
     for i,row in enumerate(segments):
+        if row.type == "audio_cue":
+            out.append(f'<audio src="{html.escape(row.text, quote=True)}"/>')
+            continue
+        if row.type == "chat_nickname":
+            speaker = "chat"
+            spoken = EMOJI_RE.sub("", row.text).strip()
+            out.append(f'<voice name="{html.escape(speaker, quote=True)}" language="{html.escape(default_language, quote=True)}" emotion="neutral" pace="fast" tone="nickname">{html.escape(spoken)}</voice>')
+            continue
         speaker=resolve_voice_name(row.speaker, cfg.voices, cfg.aliases)
         emojis=EMOJI_RE.findall(row.text); spoken=EMOJI_RE.sub("",row.text).strip()
-        is_chat=speaker.startswith("chat")
+        is_chat=speaker.startswith("chat") or row.type == "chat_message"
         emotion, pace, tone = infer_fragment_delivery(spoken, speaker, default_language, is_chat)
         for chunk_idx, chunk in enumerate(split_plain_text(spoken), start=1):
             cleaned_chunk = strip_non_prose_for_language_detection(chunk)
@@ -918,7 +1006,10 @@ def to_ssml_lines(
                     ]
                 )
             out.append(f'<voice {" ".join(attrs)}>{html.escape(tts_chunk)}</voice>')
-        if i < len(segments)-1: out.append(f'<break time="{INTER_LINE_BREAK}"/>')
+        if row.type == "chat_message":
+            out.append('<break time="0.20s"/>')
+        elif i < len(segments)-1:
+            out.append(f'<break time="{INTER_LINE_BREAK}"/>')
     if alphabetic_fragment_count > 0 and default_language in {"english", "finnish"}:
         ratio = opposite_language_count / alphabetic_fragment_count
         if ratio > 0.10:
@@ -1064,8 +1155,9 @@ def main() -> int:
         else:
             segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
         segments = normalise_segments(segments, cfg.voices, cfg.aliases)
+        segments = inject_chat_segments(segments)
     else:
-        segments = build_single_voice_segments(section, args.content, title)
+        segments = inject_chat_segments(build_single_voice_segments(section, args.content, title))
     if args.debug_speakers:
         for segment in segments:
             conf = f" confidence={segment.confidence:.2f}" if segment.type == "dialogue" else ""
