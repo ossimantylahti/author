@@ -32,6 +32,10 @@ MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = MAX_RENDERER_CHUNK_LIMIT
 NARRATOR_NAME = "Kertoja"
 MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
+AUDIO_TAG_RE = re.compile(
+    r'<audio\s+[^>]*src="([^"]+)"[^>]*/>',
+    flags=re.IGNORECASE,
+)
 
 
 def parse_bool_arg(value: str) -> bool:
@@ -142,6 +146,67 @@ class AudioCue:
     volume_db: float
     fade_in_s: float
     fade_out_s: float
+
+
+def normalise_audio_cue_name(src: str) -> str:
+    value = (src or "").strip()
+    if not value:
+        raise ValueError("Empty audio cue src attribute.")
+
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "", value)
+
+    if not safe:
+        raise ValueError(f"Invalid audio cue src attribute: {src!r}")
+
+    if safe != value:
+        raise ValueError(
+            f"Invalid audio cue src attribute {src!r}. "
+            "Use only letters, numbers, underscore and hyphen, for example notification_lead."
+        )
+
+    return safe
+
+
+def collect_audio_cue_names(ssml_text: str) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+
+    for match in AUDIO_TAG_RE.finditer(ssml_text):
+        raw_src = match.group(1)
+        cue_name = normalise_audio_cue_name(raw_src)
+        if cue_name not in seen:
+            names.append(cue_name)
+            seen.add(cue_name)
+
+    return names
+
+
+def resolve_audio_cue_path(script_dir: Path, cue_name: str) -> Path:
+    safe_name = normalise_audio_cue_name(cue_name)
+    return script_dir / f"{safe_name}.mp3"
+
+
+def validate_audio_cue_files(cue_names: list[str], script_dir: Path) -> None:
+    missing: list[Path] = []
+
+    for cue_name in cue_names:
+        path = resolve_audio_cue_path(script_dir, cue_name)
+        if not path.exists():
+            missing.append(path)
+
+    if missing:
+        lines = [
+            "Missing required audio cue file(s):",
+            *[f"  - {p}" for p in missing],
+            "",
+            "Audio cue files are referenced from SSML with <audio src=\"name\"/>.",
+            "The corresponding file must exist in the same directory as the SSML file as name.mp3.",
+            "For example:",
+            "  <audio src=\"notification_lead\"/> requires notification_lead.mp3",
+            "  <audio src=\"notification\"/> requires notification.mp3",
+            "  <audio src=\"notification_end\"/> requires notification_end.mp3",
+        ]
+        raise FileNotFoundError("\n".join(lines))
 
 
 def parse_duration(value: str | None, default_s: float | None = None) -> float | None:
@@ -1469,7 +1534,11 @@ def main() -> int:
     code_directory = Path(args.code_directory).expanduser()
     work_directory = Path(args.work_directory).expanduser()
     input_path = resolve_work_path(args.input_file, work_directory)
+    script_path = input_path.resolve()
+    script_dir = script_path.parent
     content = input_path.read_text(encoding="utf-8").strip()
+    audio_cue_names = collect_audio_cue_names(content)
+    validate_audio_cue_files(audio_cue_names, script_dir)
     cue_items = extract_audio_cues_from_ssml(content)
     cue_count = sum(1 for t, _ in cue_items if t == "cue")
     if not args.use_ambience and cue_count:
@@ -1604,6 +1673,10 @@ def main() -> int:
             print(f"- {gp}")
 
     if args.dry_run:
+        if audio_cue_names:
+            print("Audio cues referenced in SSML:")
+            for cue_name in audio_cue_names:
+                print(f"  {cue_name} -> {resolve_audio_cue_path(script_dir, cue_name)}")
         if args.use_ambience and cue_count and ambience_manifest:
             print("Audio cues:")
             idx = 1
@@ -1653,8 +1726,6 @@ def main() -> int:
     parts_dir = resolve_unique_parts_dir(out_dir)
     parts_dir.mkdir(parents=True, exist_ok=True)
     print(f"Osat tallennetaan hakemistoon: {parts_dir}")
-    script_path = input_path.resolve()
-    script_dir = script_path.parent
     chapter_prefix = script_path.stem
     part_no = 1
     quota_exhausted = False
@@ -1716,17 +1787,15 @@ def main() -> int:
                     return 2
                 part_no += 1
 
-            cue_name = (audio_m.group(1) or "").strip()
-            safe_name = re.sub(r"[^A-Za-z0-9_-]+", "", cue_name)
-            cue_src = script_dir / f"{safe_name}.mp3"
-            if cue_src.exists():
-                out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(cue_src, out_path)
-                print(f"[{part_no}] -> {out_path} ({cue_src.name})")
-                part_no += 1
-            else:
-                print(f"Warning: audio cue file not found: {safe_name}.mp3", file=sys.stderr)
+            cue_name = normalise_audio_cue_name(audio_m.group(1))
+            cue_src = resolve_audio_cue_path(script_dir, cue_name)
+            if not cue_src.exists():
+                raise FileNotFoundError(f"Audio cue file disappeared during render: {cue_src}")
+            out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(cue_src, out_path)
+            print(f"[{part_no}] -> {out_path} ({cue_src.name})")
+            part_no += 1
 
             if quota_exhausted:
                 break
@@ -1818,5 +1887,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-AUDIO_TAG_RE = re.compile(r'<audio\s+[^>]*src="([^"]+)"[^>]*/>', flags=re.IGNORECASE)
+    try:
+        raise SystemExit(main())
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Virhe: {e}", file=sys.stderr)
+        raise SystemExit(2)
