@@ -14,9 +14,16 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from docx import Document
 from openai import OpenAI
+
+
+try:
+    from mutagen import File as MutagenFile
+except Exception:  # pragma: no cover - optional dependency
+    MutagenFile = None
 
 NARRATOR_NAME = "Kertoja"
 LANGUAGE_ALIASES = {
@@ -102,6 +109,16 @@ class ChatLine:
     nickname: str
     message: str
     raw: str
+
+
+@dataclass
+class AmbientEntry:
+    path: str
+    src: str
+    filename: str
+    stem: str
+    tokens: list[str]
+    metadata: dict[str, str]
 
 
 def clean_chat_nickname(nickname: str) -> str:
@@ -978,6 +995,81 @@ def split_sentences_conservative(text: str) -> list[str]:
     return sentences
 
 
+TOKEN_SPLIT_RE = re.compile(r"[^0-9A-Za-zÅÄÖåäöáéíóúüñ]+", flags=re.IGNORECASE)
+SOFT_AMBIENT_TOKENS = {"ambience", "ambient", "loop", "background", "low", "soft"}
+HARSH_AMBIENT_TOKENS = {"loud", "hit", "boom", "impact", "scream", "alarm"}
+AMBIENT_CATEGORIES = {
+    "rain_weather": {
+        "text": {"rain", "raining", "rainy", "storm", "thunder", "drizzle", "wet", "sade", "sataa", "sateinen", "ukkonen", "myrsky"},
+        "file": {"rain", "storm", "thunder", "drizzle", "weather", "sade", "ukkonen"},
+    },
+    "city_street": {
+        "text": {"city", "street", "traffic", "road", "cars", "helsinki", "katu", "kaupunki", "liikenne", "autot"},
+        "file": {"city", "street", "traffic", "road", "cars", "urban", "kaupunki", "katu", "liikenne"},
+    },
+    "cafe_restaurant": {
+        "text": {"cafe", "café", "coffee", "cafeteria", "restaurant", "kahvila", "kahvi", "ravintola"},
+        "file": {"cafe", "café", "coffee", "cafeteria", "restaurant", "ambience", "kahvila", "kahvi", "ravintola"},
+    },
+    "computer_tech": {
+        "text": {"computer", "keyboard", "server", "screen", "monitor", "stream", "streaming", "chat", "laptop", "kone", "näppäimistö", "ruutu", "näyttö", "striimi", "palvelin"},
+        "file": {"computer", "keyboard", "server", "hum", "screen", "monitor", "room", "tech", "kone", "näppäimistö", "palvelin"},
+    },
+    "room_tone": {
+        "text": {"room", "apartment", "flat", "silence", "quiet", "still", "huone", "asunto", "hiljaisuus", "hiljainen"},
+        "file": {"room", "tone", "silence", "quiet", "indoor", "apartment", "huone", "hiljaisuus", "hiljainen"},
+    },
+}
+
+
+def tokenise_text(value: str) -> list[str]:
+    return [t for t in TOKEN_SPLIT_RE.split((value or "").lower()) if t]
+
+
+def read_mp3_metadata(path: Path) -> dict[str, str]:
+    if MutagenFile is None:
+        return {}
+    try:
+        audio = MutagenFile(path)
+        if not audio or not getattr(audio, "tags", None):
+            return {}
+        tags = audio.tags
+        out: dict[str, str] = {}
+        mapping = {"title": ["TIT2", "title"], "artist": ["TPE1", "artist"], "album": ["TALB", "album"], "genre": ["TCON", "genre"], "comment": ["COMM", "comment", "description"]}
+        for target, keys in mapping.items():
+            for key in keys:
+                raw = tags.get(key)
+                if raw is None:
+                    continue
+                value = str(raw[0] if isinstance(raw, list) and raw else raw).strip()
+                if value:
+                    out[target] = value
+                    break
+        return out
+    except Exception as exc:
+        print(f"Warning: failed to read MP3 metadata from {path}: {exc}", file=sys.stderr)
+        return {}
+
+
+def build_ambient_catalogue(ambient_dir: Path, base_dir: Path, whitelist: set[str] | None = None) -> list[AmbientEntry]:
+    entries: list[AmbientEntry] = []
+    if not ambient_dir.exists() or not ambient_dir.is_dir():
+        return entries
+    for file_path in sorted(ambient_dir.iterdir()):
+        if not file_path.is_file() or file_path.suffix.lower() != ".mp3":
+            continue
+        if whitelist and file_path.name not in whitelist:
+            continue
+        metadata = read_mp3_metadata(file_path)
+        token_sources = [file_path.stem, file_path.parent.name, metadata.get("title", ""), metadata.get("comment", ""), metadata.get("genre", "")]
+        tokens: set[str] = set()
+        for source in token_sources:
+            tokens.update(tokenise_text(source))
+        src = str(file_path.relative_to(base_dir)) if file_path.is_relative_to(base_dir) else str(file_path)
+        entries.append(AmbientEntry(path=str(file_path), src=src.replace("\\", "/"), filename=file_path.name, stem=file_path.stem, tokens=sorted(tokens), metadata=metadata))
+    return entries
+
+
 def apply_audio_adaptation(
     fragments: list[ScriptSegment],
     adaptation_style: str,
@@ -990,11 +1082,50 @@ def apply_audio_adaptation(
 
     adapted: list[ScriptSegment] = []
     debug_rows: list[dict[str, object]] = []
+    ambience_state = {"last_inserted_cue_src": None, "last_inserted_cue_fragment_id": None}
+    catalogue: list[AmbientEntry] = getattr(options, "_ambient_catalogue", [])
+    cues_mode = options.immersive_audio_cues
+
+    def suggest_ambient(text: str) -> dict[str, Any] | None:
+        text_tokens = set(tokenise_text(text))
+        best: dict[str, Any] | None = None
+        for entry in catalogue:
+            file_tokens = set(entry.tokens)
+            score = 0
+            matched_text: set[str] = set()
+            matched_file: set[str] = set()
+            matched_categories = [name for name, cat in AMBIENT_CATEGORIES.items() if text_tokens & cat["text"]]
+            for category_name in matched_categories:
+                file_hit = file_tokens & AMBIENT_CATEGORIES[category_name]["file"]
+                if file_hit:
+                    score += 3
+                    matched_file.update(file_hit)
+            metadata_tokens = set(tokenise_text(" ".join(entry.metadata.values())))
+            metadata_hits = text_tokens & metadata_tokens
+            if metadata_hits:
+                score += 2
+                matched_text.update(metadata_hits)
+            soft_hits = file_tokens & SOFT_AMBIENT_TOKENS
+            score += min(2, len(soft_hits))
+            if file_tokens & HARSH_AMBIENT_TOKENS:
+                score -= 2
+            direct_hits = text_tokens & file_tokens
+            if direct_hits:
+                score += len(direct_hits)
+                matched_text.update(direct_hits)
+                matched_file.update(direct_hits)
+            if score < 4:
+                continue
+            candidate = {"filename": entry.filename, "src": entry.src, "score": score, "matched_text_keywords": sorted(matched_text), "matched_file_tokens": sorted(matched_file), "reason": "Environment keywords matched ambient file tokens."}
+            if best is None or candidate["score"] > best["score"]:
+                best = candidate
+        return best
+
     for frag in fragments:
         base = {"fragment_id": frag.segment_id, "fragment_type": frag.type, "speaker": frag.speaker, "language": main_language, "original_text": frag.text}
         if is_chat_pipeline_segment(frag) or frag.type == "audio_cue":
             adapted.append(frag)
-            debug_rows.append({**base, "adapted_text": frag.text, "changes": ["skipped_chat" if is_chat_pipeline_segment(frag) else "skipped_effect"], "risk_level": "safe", "skipped": True, "skip_reason": "chat_pipeline" if is_chat_pipeline_segment(frag) else "effect_fragment"})
+            debug_rows.append({**base, "adapted_text": frag.text, "changes": ["skipped_chat" if is_chat_pipeline_segment(frag) else "skipped_effect"], "risk_level": "safe", "skipped": True, "skip_reason": "chat_pipeline" if is_chat_pipeline_segment(frag) else "effect_fragment", "immersive_cues_suggested": [], "immersive_cues_inserted": []})
             continue
         text = frag.text
         changes: list[str] = []
@@ -1009,24 +1140,54 @@ def apply_audio_adaptation(
             changes.append("added_break")
         else:
             adapted.append(frag)
+        suggested: list[dict[str, Any]] = []
+        inserted: list[dict[str, Any]] = []
+        if adaptation_style == "immersive" and cues_mode != "off" and frag.type == "narration":
+            cue = suggest_ambient(text)
+            if cue and cue["src"] != ambience_state["last_inserted_cue_src"]:
+                suggested.append(cue)
+                if cues_mode == "ssml":
+                    adapted.append(ScriptSegment(segment_id=frag.segment_id, type="audio_cue", speaker=NARRATOR_NAME, text=cue["src"]))
+                    inserted.append({"filename": cue["filename"], "src": cue["src"]})
+                    ambience_state["last_inserted_cue_src"] = cue["src"]
+                    ambience_state["last_inserted_cue_fragment_id"] = frag.segment_id
+                    changes.append("inserted_ambient_cue")
         if not changes and frag.type == "dialogue" and text.strip().endswith("?"):
             changes.append("unchanged")
-        debug_rows.append({**base, "adapted_text": adapted[-1].text, "changes": changes or ["unchanged"], "risk_level": "safe", "skipped": False, "skip_reason": ""})
+        debug_rows.append({**base, "adapted_text": adapted[-1].text, "changes": changes or ["unchanged"], "risk_level": "safe", "skipped": False, "skip_reason": "", "immersive_cues_suggested": suggested, "immersive_cues_inserted": inserted})
     return adapted, debug_rows
 
 
 def write_adaptation_reports(debug_rows: list[dict[str, object]], ssml_output_path: Path, options: argparse.Namespace, chapter_label: str | None, model_used: str) -> None:
     debug_path = Path(options.adaptation_debug_json) if options.adaptation_debug_json else ssml_output_path.with_name(f"{ssml_output_path.stem}_adaptation_debug.json")
     review_path = Path(options.adaptation_review_md) if options.adaptation_review_md else ssml_output_path.with_name(f"{ssml_output_path.stem}_adaptation_review.md")
-    debug_path.write_text(json.dumps(debug_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = {
+        "ambient_directory": str(getattr(options, "_ambient_directory", "")),
+        "ambient_directory_exists": bool(getattr(options, "_ambient_directory_exists", False)),
+        "ambient_files_found": len(getattr(options, "_ambient_catalogue", [])),
+        "immersive_audio_cues_mode": options.immersive_audio_cues,
+        "ambient_catalogue": [
+            {"filename": e.filename, "src": e.src, "tokens": e.tokens, "metadata": e.metadata}
+            for e in getattr(options, "_ambient_catalogue", [])
+        ],
+        "fragments": debug_rows,
+    }
+    debug_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     total = len(debug_rows)
     changed = sum(1 for row in debug_rows if row.get("changes") != ["unchanged"] and not row.get("skipped"))
     skipped_chat = sum(1 for row in debug_rows if row.get("skip_reason") == "chat_pipeline")
-    lines = [f"# Adaptation review", "", f"- Chapter/content: {chapter_label or '-'}", f"- Adaptation style: {options.adaptation_style}", f"- Model: {model_used}", f"- Total fragments: {total}", f"- Changed fragments: {changed}", f"- Skipped chat fragments: {skipped_chat}", f"- Rejected changes: 0", ""]
+    lines = [f"# Adaptation review", "", f"- Chapter/content: {chapter_label or '-'}", f"- Adaptation style: {options.adaptation_style}", f"- Model: {model_used}", f"- Total fragments: {total}", f"- Changed fragments: {changed}", f"- Skipped chat fragments: {skipped_chat}", f"- Rejected changes: 0", "", f"Ambient directory: {getattr(options, '_ambient_directory', '')}", f"Ambient MP3 files found: {len(getattr(options, '_ambient_catalogue', []))}", f"Immersive audio cue mode: {options.immersive_audio_cues}", ""]
     for row in debug_rows:
         if row.get("changes") == ["unchanged"] or row.get("skipped"):
             continue
         lines += [f"## Fragment {row.get('fragment_id')}", "", f"Speaker: {row.get('speaker')}", f"Language: {row.get('language')}", f"Changes: {', '.join(row.get('changes', []))}", f"Risk: {row.get('risk_level')}", "", "Original:", str(row.get("original_text", "")), "", "Adapted:", str(row.get("adapted_text", "")), "", "Reason:", "Added conservative listening pauses for clarity.", ""]
+        for cue in row.get("immersive_cues_suggested", []):
+            lines += [f"Cue suggested: {cue.get('src')}", f"Matched because: text keywords: {', '.join(cue.get('matched_text_keywords', []))}", f"file tokens: {', '.join(cue.get('matched_file_tokens', []))}", f"score: {cue.get('score')}"]
+            if options.immersive_audio_cues == "metadata":
+                lines.append("Cue was not inserted into SSML because --immersive-audio-cues=metadata.")
+            lines.append("")
+        for cue in row.get("immersive_cues_inserted", []):
+            lines += [f"Cue inserted into SSML: <audio src=\"{cue.get('src')}\"/>", ""]
     review_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     print(f"Adaptation debug JSON: {debug_path}")
     print(f"Adaptation review Markdown: {review_path}")
@@ -1266,6 +1427,10 @@ def main() -> int:
     mode.add_argument("--adaptation-model", default=None, help="Optional model name reserved for adaptation passes.")
     mode.add_argument("--adaptation-debug-json", default=None, help="Optional path for adaptation debug JSON output.")
     mode.add_argument("--adaptation-review-md", default=None, help="Optional path for adaptation review Markdown output.")
+    mode.add_argument("--immersive-audio-cues", choices=["off", "metadata", "ssml"], default="metadata", help="Ambient cue behaviour for immersive adaptation.")
+    mode.add_argument("--ambient-directory", default=None, help="Directory containing available ambient MP3 files.")
+    mode.add_argument("--immersive-cue-whitelist", default=None, help="Optional JSON file listing allowed ambient MP3 filenames.")
+    mode.add_argument("--strict-ambient-cues", action="store_true", help="Treat missing or empty ambient directories as an error.")
 
     speaker = parser.add_argument_group("speaker detection, used mainly with --use-multipolyfony true")
     speaker.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai", help="Speaker attribution method for polyphonic SSML.")
@@ -1307,9 +1472,39 @@ def main() -> int:
             print(f"[{segment.type}] speaker={segment.speaker} profile={profile_text}{conf} text={segment.text!r}")
     output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
     out = resolve_output_path(output_arg, args.content, input_path, title)
-    if args.adaptation_style in {"immersive", "dramatic"}:
+    if args.adaptation_style in {"dramatic"}:
         print(f"Warning: adaptation style {args.adaptation_style!r} is not implemented yet; using light.", file=sys.stderr)
         args.adaptation_style = "light"
+    output_base = out.parent if out.suffix else out
+    ambient_dir = Path(args.ambient_directory).expanduser() if args.ambient_directory else (output_base / "ambient")
+    if not ambient_dir.exists() and args.ambient_directory is None:
+        ambient_dir = Path("./ambient").resolve()
+    args._ambient_directory = str(ambient_dir)
+    args._ambient_directory_exists = ambient_dir.exists() and ambient_dir.is_dir()
+    whitelist: set[str] | None = None
+    if args.immersive_cue_whitelist:
+        try:
+            whitelist_data = json.loads(Path(args.immersive_cue_whitelist).read_text(encoding="utf-8"))
+            if isinstance(whitelist_data, list):
+                whitelist = {str(x) for x in whitelist_data}
+        except Exception as exc:
+            print(f"Warning: could not read immersive cue whitelist JSON: {exc}", file=sys.stderr)
+    if args.adaptation_style == "immersive" and args.immersive_audio_cues != "off":
+        if not args._ambient_directory_exists:
+            msg = f"Ambient directory missing: {ambient_dir}"
+            if args.strict_ambient_cues:
+                raise SystemExit(msg)
+            print(f"Warning: {msg}", file=sys.stderr)
+            args._ambient_catalogue = []
+        else:
+            args._ambient_catalogue = build_ambient_catalogue(ambient_dir, work_directory.resolve(), whitelist=whitelist)
+            if not args._ambient_catalogue:
+                msg = f"No ambient MP3 files found in {ambient_dir}"
+                if args.strict_ambient_cues:
+                    raise SystemExit(msg)
+                print(f"Warning: {msg}", file=sys.stderr)
+    else:
+        args._ambient_catalogue = []
     main_language = dominant_language_from_segments(segments)
     debug_rows: list[dict[str, object]] = []
     if args.adaptation_style != "none":
