@@ -602,13 +602,13 @@ def infer_fragment_delivery(text: str, speaker: str, language_name: str, is_chat
             return "reaktiivinen", "fast", "chatty"
         if speaker == NARRATOR_NAME:
             if any(x in lowered for x in ["jännite", "ase", "veri", "huusi", "räjähdys", "pakeni"]):
-                return "jännitteinen", "medium", "tense"
-            return "hillitty", "medium", "dry"
+                return "jännitteinen", "slow", "tense"
+            return "hillitty", "slow", "dry"
         if any(x in lowered for x in ["teidän on nyt syytä", "heti", "tulkaa tänne"]):
-            return "päättäväinen", "medium", "firm"
+            return "päättäväinen", "slow", "firm"
         if any(x in lowered for x in ["pelk", "kauhu", "järky", "apua", "ei voi olla"]):
-            return "järkyttynyt", "medium", "tense"
-        pace = "fast" if "!" in lowered else "medium"
+            return "järkyttynyt", "slow", "tense"
+        pace = "fast" if "!" in lowered else "slow"
         tone = "questioning" if "?" in lowered else "neutral"
         return "neutraali", pace, tone
     emotion = infer_chat_emotion(text, []) if is_chat else "neutral"
@@ -815,8 +815,9 @@ def inject_chat_segments(base_segments: list[ScriptSegment]) -> list[ScriptSegme
                     out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification_lead"))
                     out.append(ScriptSegment(segment_id=0, type="narration", speaker=NARRATOR_NAME, text="", confidence=1.0))
                     in_chat_block = True
-                out.append(ScriptSegment(segment_id=0, type="chat_nickname", speaker="chat", text=chat.nickname))
                 out.append(ScriptSegment(segment_id=0, type="audio_cue", speaker=NARRATOR_NAME, text="notification"))
+                out.append(ScriptSegment(segment_id=0, type="chat_nickname", speaker="chat", text=chat.nickname))
+                out.append(ScriptSegment(segment_id=0, type="chat_pause", speaker="chat", text="0.3s"))
                 out.append(ScriptSegment(segment_id=0, type="chat_message", speaker="chat", text=chat.message))
             else:
                 if in_chat_block:
@@ -942,6 +943,9 @@ def to_ssml_lines(
     for i,row in enumerate(segments):
         if row.type == "audio_cue":
             out.append(f'<audio src="{html.escape(row.text, quote=True)}"/>')
+            continue
+        if row.type == "chat_pause":
+            out.append(f'<break time="{html.escape(row.text, quote=True)}"/>')
             continue
         if row.type == "chat_nickname":
             speaker = "chat"
