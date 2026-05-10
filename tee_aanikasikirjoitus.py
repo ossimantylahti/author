@@ -31,6 +31,7 @@ LANGUAGE_ALIASES = {
     "espanol": "spanish",
 }
 MAX_FRAGMENT_LEN = 4000
+SINGLE_VOICE_MAX_FRAGMENT_LEN = 4095
 INTER_CHUNK_BREAK = "0.4s"
 INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF\U000024C2-\U0001F251]+", flags=re.UNICODE)
@@ -46,6 +47,15 @@ SPEECH_VERB_SUFFIXES = {
     "spanish": ["ar", "o", "as", "a", "amos", "áis", "an", "é", "aste", "ó", "aron", "aba", "abas", "ábamos", "aban", "aré", "arás", "ará", "arán", "aría", "arías", "arían", "ado", "ada", "ados", "adas", "ando", "en", "emos", "éis"],
 }
 
+
+
+def parse_bool_arg(value: str) -> bool:
+    v = (value or "").strip().lower()
+    if v in {"true", "yes", "1", "on"}:
+        return True
+    if v in {"false", "no", "0", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("Boolean value expected: true/false/yes/no/1/0/on/off")
 def _build_speech_verbs() -> set[str]:
     forms: set[str] = set()
     for lang, roots in SPEECH_VERB_ROOTS.items():
@@ -644,6 +654,106 @@ def normalise_finnish_numbers_for_tts(text: str) -> str:
         return f"{lead} {number_to_finnish_0_99(hour)} {number_to_finnish_0_99(minute, minute=True)}"
     return re.sub(r"\b([Kk]ello|[Kk]lo)\s+(\d{1,2})\.(\d{2})\b", lambda m: repl(m).replace("klo", "kello"), text)
 
+def dominant_language_from_text(text: str) -> str:
+    prose = strip_non_prose_for_language_detection(text)
+    return detect_language_name(prose) if prose else "finnish"
+
+
+def spoken_chapter_number(content: str, language: str) -> str:
+    maps = {
+        "finnish": {"0": "nolla", "1": "yksi", "2": "kaksi", "3": "kolme", "4": "neljä", "5": "viisi", "6": "kuusi", "7": "seitsemän", "8": "kahdeksan", "9": "yhdeksän", ".": "piste"},
+        "english": {"0": "zero", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine", ".": "point"},
+        "spanish": {"0": "cero", "1": "uno", "2": "dos", "3": "tres", "4": "cuatro", "5": "cinco", "6": "seis", "7": "siete", "8": "ocho", "9": "nueve", ".": "punto"},
+    }
+    table = maps.get(language, maps["english"])
+    words = [table[ch] for ch in content.strip() if ch in table]
+    return " ".join(words) if words else content
+
+
+def build_chapter_heading(content: str | None, title: str, language: str) -> str:
+    number = (content or "").strip()
+    if re.fullmatch(r"\d+\.\d+", number):
+        spoken = spoken_chapter_number(number, language)
+        if language == "finnish":
+            return f"Luku {spoken}, {title}."
+        if language == "spanish":
+            return f"Capítulo {spoken}, {title}."
+        return f"Chapter {spoken}, {title}."
+    if language == "finnish":
+        return f"Luku {title}."
+    if language == "spanish":
+        return f"Capítulo {title}."
+    return f"Chapter {title}."
+
+
+def _split_overlong_unit(unit: str, max_len: int) -> list[str]:
+    if len(unit) <= max_len:
+        return [unit]
+    pieces: list[str] = []
+    for para in [p.strip() for p in re.split(r"\n\s*\n", unit) if p.strip()]:
+        if len(para) <= max_len:
+            pieces.append(para)
+            continue
+        sentences = [x.strip() for x in re.split(r"(?<=[.!?…])\s+", para) if x.strip()]
+        cur = ""
+        for sent in sentences:
+            candidate = f"{cur} {sent}".strip() if cur else sent
+            if len(candidate) <= max_len:
+                cur = candidate
+                continue
+            if cur:
+                pieces.append(cur)
+                cur = ""
+            if len(sent) <= max_len:
+                cur = sent
+                continue
+            print("Warning: had to force-split an overlong single narrator unit.", file=sys.stderr)
+            rem = sent
+            while rem:
+                if len(rem) <= max_len:
+                    cur = rem
+                    rem = ""
+                else:
+                    cut = rem.rfind(" ", 0, max_len)
+                    cut = cut if cut > 0 else max_len
+                    pieces.append(rem[:cut].strip())
+                    rem = rem[cut:].strip()
+        if cur:
+            pieces.append(cur)
+    return [p for p in pieces if p]
+
+
+def split_single_voice_fragments(text: str, max_len: int = SINGLE_VOICE_MAX_FRAGMENT_LEN) -> list[str]:
+    units = [u.strip() for u in re.split(r"\n\s*\n", text.strip()) if u.strip()]
+    prepared: list[str] = []
+    for u in units:
+        prepared.extend(_split_overlong_unit(u, max_len))
+    chunks: list[str] = []
+    current = ""
+    for unit in prepared:
+        candidate = f"{current}\n\n{unit}".strip() if current else unit
+        if len(candidate) <= max_len:
+            current = candidate
+        else:
+            if current:
+                chunks.append(current)
+            current = unit
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def build_single_voice_segments(section: str, content: str | None, title: str) -> list[ScriptSegment]:
+    normalized = section.strip() + "\n"
+    language = dominant_language_from_text(normalized)
+    heading = build_chapter_heading(content, title, language)
+    fragments = split_single_voice_fragments(normalized, max_len=SINGLE_VOICE_MAX_FRAGMENT_LEN)
+    segments = [ScriptSegment(segment_id=1, type="narration", speaker=NARRATOR_NAME, text=heading)]
+    for i, frag in enumerate(fragments, start=2):
+        segments.append(ScriptSegment(segment_id=i, type="narration", speaker=NARRATOR_NAME, text=frag))
+    return segments
+
+
 def split_plain_text(text: str, limit: int = MAX_FRAGMENT_LEN) -> list[str]:
     text = text.strip()
     if len(text) <= limit: return [text] if text else []
@@ -889,6 +999,7 @@ def main() -> int:
     parser.add_argument("--debug-speakers", action="store_true")
     parser.add_argument("--openai-model", default="gpt-4.1-mini")
     parser.add_argument("--openai-profile-variant", default=None)
+    parser.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, help="true=tuota puhujakohtainen/polyfoninen SSML, false=tuota pitkät yhden kertojan fragmentit.")
     args = parser.parse_args()
     try:
         code_directory = Path(args.code_directory).expanduser()
@@ -901,15 +1012,19 @@ def main() -> int:
         print(f"Virhe: {e}", file=sys.stderr); return 2
     print(f"Detected chapter title: {title}")
     print(f"Speaker detection mode: {args.speaker_detection}")
-    if args.speaker_detection == "openai":
-        try:
-            segments = attribute_speakers_with_openai(section, cfg.voices, cfg.aliases, model=args.openai_model, debug=args.debug_speakers)
-        except Exception as e:
-            print(f"WARNING: OpenAI speaker attribution failed: {e}. Falling back to rule-based speaker detection.", file=sys.stderr)
+    print(f"Use multipolyfony: {args.use_multipolyfony}")
+    if args.use_multipolyfony:
+        if args.speaker_detection == "openai":
+            try:
+                segments = attribute_speakers_with_openai(section, cfg.voices, cfg.aliases, model=args.openai_model, debug=args.debug_speakers)
+            except Exception as e:
+                print(f"WARNING: OpenAI speaker attribution failed: {e}. Falling back to rule-based speaker detection.", file=sys.stderr)
+                segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
+        else:
             segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
+        segments = normalise_segments(segments, cfg.voices, cfg.aliases)
     else:
-        segments = attribute_speakers_rule_based(section, cfg.voices, cfg.aliases, debug=args.debug_speakers)
-    segments = normalise_segments(segments, cfg.voices, cfg.aliases)
+        segments = build_single_voice_segments(section, args.content, title)
     if args.debug_speakers:
         for segment in segments:
             conf = f" confidence={segment.confidence:.2f}" if segment.type == "dialogue" else ""
