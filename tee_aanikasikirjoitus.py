@@ -931,6 +931,30 @@ def to_ssml_lines(
                 print(f"  suspicious: {frag}", file=sys.stderr)
     return out
 
+
+def insert_opening_ambience_after_first_voice(
+    ssml_lines: list[str],
+    name: str,
+    duration: str,
+    volume: str,
+) -> list[str]:
+    cue_line = (
+        f'<ambient name="{html.escape(name, quote=True)}" '
+        f'duration="{html.escape(duration, quote=True)}" '
+        f'volume="{html.escape(volume, quote=True)}" '
+        'fade_in="1s" fade_out="2s"/>'
+    )
+    inserted = False
+    out: list[str] = []
+    for line in ssml_lines:
+        out.append(line)
+        if not inserted and re.search(r"<voice\b", line, flags=re.IGNORECASE):
+            out.append(f'<break time="{INTER_LINE_BREAK}"/>')
+            out.append(cue_line)
+            out.append(f'<break time="{INTER_LINE_BREAK}"/>')
+            inserted = True
+    return out if inserted else ssml_lines
+
 def final_voice_gate(ssml: str, narrators: dict[str, str]) -> str:
     def repl(m: re.Match[str]) -> str:
         val = m.group(1)
@@ -1035,6 +1059,9 @@ def main() -> int:
 
     mode = parser.add_argument_group("generation mode")
     mode.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, metavar="BOOL", help="Use speaker-specific/polyphonic SSML. false creates long single-narrator Kertoja fragments and is the normal production mode. Accepted values: true/false, yes/no, 1/0, on/off.")
+    mode.add_argument("--opening-ambience", default=None, help="Optional ambience cue inserted after the chapter heading, for example cafe_night. Requires --use-ambience true in tee_aanikirja.py to be rendered.")
+    mode.add_argument("--opening-ambience-duration", default="5s", help="Duration for --opening-ambience.")
+    mode.add_argument("--opening-ambience-volume", default="-24dB", help="Volume for --opening-ambience.")
 
     speaker = parser.add_argument_group("speaker detection, used mainly with --use-multipolyfony true")
     speaker.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai", help="Speaker attribution method for polyphonic SSML.")
@@ -1073,9 +1100,15 @@ def main() -> int:
             profile = resolve_openai_profile(segment.speaker, language, cfg, variant=args.openai_profile_variant)
             profile_text = profile.profile_id if profile else "-"
             print(f"[{segment.type}] speaker={segment.speaker} profile={profile_text}{conf} text={segment.text!r}")
-    ssml = "<speak>\n" + "\n".join(
-        to_ssml_lines(segments, cfg, openai_profile_variant=args.openai_profile_variant)
-    ) + "\n</speak>\n"
+    ssml_lines = to_ssml_lines(segments, cfg, openai_profile_variant=args.openai_profile_variant)
+    if args.opening_ambience:
+        ssml_lines = insert_opening_ambience_after_first_voice(
+            ssml_lines,
+            name=args.opening_ambience,
+            duration=args.opening_ambience_duration,
+            volume=args.opening_ambience_volume,
+        )
+    ssml = "<speak>\n" + "\n".join(ssml_lines) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
     output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
     out = resolve_output_path(output_arg, args.content, input_path, title)

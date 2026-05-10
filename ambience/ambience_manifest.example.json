@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "sounds": {
+    "cafe_night": {
+      "file": "cafe_night_soft.wav",
+      "type": "ambient",
+      "default_duration": "5s",
+      "default_volume": "-24dB",
+      "default_fade_in": "1s",
+      "default_fade_out": "2s",
+      "description": "Soft late-night café ambience: low murmur, cups, ventilation."
+    },
+    "distant_foghorn": {
+      "file": "harbour_foghorn_distant.wav",
+      "type": "sfx",
+      "default_volume": "-18dB",
+      "description": "A distant ship foghorn."
+    },
+    "train_tracks_switching": {
+      "file": "train_tracks_switching.wav",
+      "type": "sfx",
+      "default_volume": "-16dB",
+      "description": "Train changing tracks, metallic but not too loud."
+    }
+  }
+}
