@@ -17,6 +17,7 @@ import importlib
 from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
+import xml.etree.ElementTree as ET
 
 from openai import OpenAI
 
@@ -131,6 +132,104 @@ class PronunciationRule:
     instruction: str | None
     ipa: str | None
     origin_language: str | None
+
+
+@dataclass
+class AudioCue:
+    cue_type: str
+    name: str
+    duration_s: float | None
+    volume_db: float
+    fade_in_s: float
+    fade_out_s: float
+
+
+def parse_duration(value: str | None, default_s: float | None = None) -> float | None:
+    if value is None:
+        return default_s
+    v = value.strip().lower()
+    if not v:
+        return default_s
+    if v.endswith("ms"):
+        return float(v[:-2]) / 1000.0
+    if v.endswith("s"):
+        return float(v[:-1])
+    raise ValueError(f"Invalid duration: {value}")
+
+
+def parse_volume_db(value: str | None, default_db: float = -24.0) -> float:
+    if value is None:
+        return default_db
+    v = value.strip().lower()
+    if v.endswith("db"):
+        return float(v[:-2])
+    raise ValueError(f"Invalid volume: {value}")
+
+
+def load_ambience_manifest(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("sounds"), dict):
+        raise ValueError("Ambience manifest must be a JSON object with sounds.")
+    return data
+
+
+def extract_audio_cues_from_ssml(text: str) -> list[tuple[str, AudioCue | str]]:
+    root = ET.fromstring(text)
+    out: list[tuple[str, AudioCue | str]] = []
+    current: list[str] = []
+    for elem in list(root):
+        tag = elem.tag.lower().split("}")[-1]
+        xml = ET.tostring(elem, encoding="unicode")
+        if tag in {"ambient", "sfx"}:
+            if current:
+                out.append(("speech", "\n".join(current)))
+                current = []
+            cue = AudioCue(
+                cue_type=tag,
+                name=(elem.attrib.get("name") or "").strip(),
+                duration_s=parse_duration(elem.attrib.get("duration")),
+                volume_db=parse_volume_db(elem.attrib.get("volume"), -24.0 if tag == "ambient" else -18.0),
+                fade_in_s=parse_duration(elem.attrib.get("fade_in"), 1.0) or 1.0,
+                fade_out_s=parse_duration(elem.attrib.get("fade_out"), 2.0) or 2.0,
+            )
+            out.append(("cue", cue))
+        else:
+            current.append(xml)
+    if current:
+        out.append(("speech", "\n".join(current)))
+    return out
+
+
+def resolve_cue_file_path(sound_meta: dict[str, Any], ambience_directory: Path) -> Path:
+    file_name = str(sound_meta.get("file", "")).strip()
+    fp = Path(file_name).expanduser()
+    return fp if fp.is_absolute() else (ambience_directory / fp)
+
+
+def render_audio_cue(cue: AudioCue, manifest: dict, ambience_directory: Path, out_path: Path) -> None:
+    sounds = manifest.get("sounds", {})
+    sound_meta = sounds.get(cue.name)
+    if not sound_meta:
+        raise KeyError(f"Error: ambience cue '{cue.name}' not found in ambience manifest.")
+    src = resolve_cue_file_path(sound_meta, ambience_directory)
+    if not src.exists():
+        raise FileNotFoundError(f"Error: ambience file not found for cue '{cue.name}': {src}")
+    duration_s = cue.duration_s or parse_duration(sound_meta.get("default_duration"))
+    volume_db = cue.volume_db if cue.volume_db is not None else parse_volume_db(sound_meta.get("default_volume"))
+    fade_in_s = cue.fade_in_s if cue.fade_in_s is not None else parse_duration(sound_meta.get("default_fade_in"), 1.0)
+    fade_out_s = cue.fade_out_s if cue.fade_out_s is not None else parse_duration(sound_meta.get("default_fade_out"), 2.0)
+    af = [f"volume={volume_db}dB"]
+    if cue.cue_type == "ambient" and duration_s is not None:
+        if fade_in_s and fade_in_s > 0:
+            af.append(f"afade=t=in:st=0:d={fade_in_s}")
+        if fade_out_s and fade_out_s > 0:
+            afade_st = max(0.0, duration_s - float(fade_out_s))
+            af.append(f"afade=t=out:st={afade_st}:d={fade_out_s}")
+    cmd = ["ffmpeg", "-y", "-i", str(src)]
+    if cue.cue_type == "ambient" and duration_s is not None:
+        cmd.extend(["-t", str(duration_s)])
+    cmd.extend(["-af", ",".join(af), "-ac", "1", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)])
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
 def preview_pronunciation_rules(active_map: list[Any], limit: int = 20) -> list[str]:
@@ -1332,11 +1431,14 @@ def main() -> int:
     paths.add_argument("--pronunciation-file", metavar="JSON", default=DEFAULT_PRONUNCIATION_FILE, help="ElevenLabs pronunciation dictionary locator file. Relative paths are resolved against --code-directory.")
     paths.add_argument("--pronunciation-dictionary", metavar="JSON", default=None, help="Local pronunciation dictionary used especially for OpenAI, Piper and Kokoro. Relative paths are resolved against --code-directory.")
     paths.add_argument("--data-dir", metavar="DIR", default=str(Path.home() / ".cache" / "om-author"), help="Directory for downloaded runtime assets such as Kokoro and Piper models.")
+    paths.add_argument("--ambience-directory", default="ambience", help="Directory containing ambience and sound effect audio files. Relative paths are resolved against --code-directory.")
+    paths.add_argument("--ambience-manifest", default="ambience/ambience_manifest.json", help="JSON manifest mapping ambience/sfx names to audio files and default mixing settings. Relative paths are resolved against --code-directory.")
     renderer = parser.add_argument_group("renderer")
     renderer.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper", help="TTS backend.")
     renderer.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, metavar="BOOL", help="Use SSML speaker-specific voices. false forces all fragments to the Kertoja voice and is the normal production mode. Accepted values: true/false, yes/no, 1/0, on/off.")
     renderer.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT, metavar="N", help="Maximum characters per renderer chunk. Keep at or below 4000 for safety.")
     renderer.add_argument("--language", metavar="LANG", default=None, help="Pronunciation dictionary fallback language, for example fi-FI, en-GB, en-US or es-MX. Normally inferred from SSML language attributes.")
+    renderer.add_argument("--use-ambience", type=parse_bool_arg, default=False, help=("Enable custom <ambient> and <sfx> tags in SSML. If false, ambience tags are ignored/removed before TTS rendering."))
     eleven = parser.add_argument_group("ElevenLabs options")
     eleven.add_argument("--model", choices=["v2", "v3"], default="v2", help="ElevenLabs model family.")
     eleven.add_argument("--model-id", default=None, metavar="MODEL_ID", help="Explicit ElevenLabs model id. If omitted, --model is mapped to the default model id.")
@@ -1368,6 +1470,12 @@ def main() -> int:
     work_directory = Path(args.work_directory).expanduser()
     input_path = resolve_work_path(args.input_file, work_directory)
     content = input_path.read_text(encoding="utf-8").strip()
+    cue_items = extract_audio_cues_from_ssml(content)
+    cue_count = sum(1 for t, _ in cue_items if t == "cue")
+    if not args.use_ambience and cue_count:
+        print(f"Ambience disabled: ignored {cue_count} audio cue(s).")
+    speech_only_blocks = [str(v) for t, v in cue_items if t == "speech"]
+    content = "<speak>\n" + "\n".join(speech_only_blocks) + "\n</speak>"
     narrators_path = resolve_code_path(args.narrators_file, code_directory)
     if not narrators_path.exists():
         print(f"Error: narrators file is required for fallback narrator resolution: {args.narrators_file}", file=sys.stderr)
@@ -1399,6 +1507,15 @@ def main() -> int:
                 f"OpenAI-usable aliases or instructions. Example: {example.original} -> {example_replacement}. "
                 "Add openai_alias or instruction fields."
             )
+    ambience_manifest: dict[str, Any] | None = None
+    ambience_directory = resolve_code_path(args.ambience_directory, code_directory)
+    if args.use_ambience:
+        manifest_path = resolve_code_path(args.ambience_manifest, code_directory)
+        try:
+            ambience_manifest = load_ambience_manifest(manifest_path)
+        except Exception as e:
+            print(f"Virhe: {e}", file=sys.stderr)
+            return 2
     try:
         ensure_renderer_installed(args.renderer)
         ensure_ffmpeg_installed()
@@ -1487,6 +1604,25 @@ def main() -> int:
             print(f"- {gp}")
 
     if args.dry_run:
+        if args.use_ambience and cue_count and ambience_manifest:
+            print("Audio cues:")
+            idx = 1
+            for kind, val in cue_items:
+                if kind != "cue":
+                    idx += 1
+                    continue
+                cue = val
+                meta = ambience_manifest.get("sounds", {}).get(cue.name, {})
+                file_name = meta.get("file", "missing")
+                dur = cue.duration_s if cue.duration_s is not None else parse_duration(meta.get("default_duration"))
+                dur_text = f" duration={dur:.1f}s" if dur is not None else ""
+                print(f"  {idx:04d} {cue.cue_type} {cue.name}{dur_text} volume={cue.volume_db}dB file={args.ambience_directory}/{file_name}")
+                idx += 1
+        elif (not args.use_ambience) and cue_count:
+            print("Audio cues found but ambience is disabled:")
+            for kind, val in cue_items:
+                if kind == "cue":
+                    print(f"  {val.name}")
         if args.renderer == "openai":
             preview_text = ""
             for _, chunk in chunks:
@@ -1522,7 +1658,37 @@ def main() -> int:
     chapter_prefix = script_path.stem
     part_no = 1
     quota_exhausted = False
-    for speaker, chunk in chunks:
+    render_sequence: list[tuple[str, Any]] = [("speech_chunk", c) for c in chunks]
+    if args.use_ambience and cue_count:
+        render_sequence = []
+        for kind, val in cue_items:
+            if kind == "speech":
+                speech_chunks = split_ssml_chunks(f"<speak>\n{val}\n</speak>", chunk_limit)
+                render_sequence.extend([("speech_chunk", c) for c in speech_chunks])
+            else:
+                render_sequence.append(("cue", val))
+
+    for item_type, item_value in render_sequence:
+        if item_type == "cue":
+            cue = item_value
+            if not args.use_ambience:
+                continue
+            out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
+            try:
+                render_audio_cue(cue, ambience_manifest or {}, ambience_directory, out_path)
+            except KeyError as e:
+                print(str(e), file=sys.stderr)
+                return 2
+            except FileNotFoundError as e:
+                print(str(e), file=sys.stderr)
+                return 2
+            except Exception as e:
+                print(f"Virhe: ambience render failed: {e}", file=sys.stderr)
+                return 2
+            print(f"[{part_no}] -> {out_path} ({cue.cue_type} {cue.name})")
+            part_no += 1
+            continue
+        speaker, chunk = item_value
         pending = chunk
         while True:
             notif_m = re.search(r'<audio\s+[^>]*src="notification"[^>]*/>', pending, flags=re.IGNORECASE)
