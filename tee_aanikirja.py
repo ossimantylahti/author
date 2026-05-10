@@ -1691,11 +1691,11 @@ def main() -> int:
         speaker, chunk = item_value
         pending = chunk
         while True:
-            notif_m = re.search(r'<audio\s+[^>]*src="notification"[^>]*/>', pending, flags=re.IGNORECASE)
-            if not notif_m:
+            audio_m = AUDIO_TAG_RE.search(pending)
+            if not audio_m:
                 break
 
-            before = pending[:notif_m.start()].strip()
+            before = pending[:audio_m.start()].strip()
             if before and not is_pause_only_ssml(before):
                 i = part_no
                 chunk_voice_id, chunk_voice_source = resolve_voice_id_for_fragment(args.renderer, before, speaker, narrators, args.voice_name, args.voice_id, args.use_multipolyfony)
@@ -1716,18 +1716,22 @@ def main() -> int:
                     return 2
                 part_no += 1
 
-            notif_src = script_dir / "notification.mp3"
-            if notif_src.exists():
+            cue_name = (audio_m.group(1) or "").strip()
+            safe_name = re.sub(r"[^A-Za-z0-9_-]+", "", cue_name)
+            cue_src = script_dir / f"{safe_name}.mp3"
+            if cue_src.exists():
                 out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(notif_src, out_path)
-                print(f"[{part_no}] -> {out_path} (notification.mp3)")
+                shutil.copyfile(cue_src, out_path)
+                print(f"[{part_no}] -> {out_path} ({cue_src.name})")
                 part_no += 1
+            else:
+                print(f"Warning: audio cue file not found: {safe_name}.mp3", file=sys.stderr)
 
             if quota_exhausted:
                 break
 
-            pending = pending[notif_m.end():]
+            pending = pending[audio_m.end():]
             pending, pause_s = pop_leading_break_seconds(pending)
             if pause_s is None:
                 is_dialogue_to_narrator = speaker != NARRATOR_NAME
@@ -1815,3 +1819,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+AUDIO_TAG_RE = re.compile(r'<audio\s+[^>]*src="([^"]+)"[^>]*/>', flags=re.IGNORECASE)
