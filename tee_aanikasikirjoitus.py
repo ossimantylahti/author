@@ -987,19 +987,60 @@ def resolve_work_path(path_arg: str, work_directory: Path) -> Path:
     p = Path(path_arg).expanduser()
     return p if p.is_absolute() else (work_directory / p)
 
+
+class HelpFormatter(
+    argparse.ArgumentDefaultsHelpFormatter,
+    argparse.RawDescriptionHelpFormatter,
+):
+    pass
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Poimi yksi luku Word-käsikirjoituksesta")
-    parser.add_argument("--input", required=True, help="Syöte .docx. Suhteellinen polku ratkaistaan --work-directoryyn nähden.")
-    parser.add_argument("--content", required=False)
-    parser.add_argument("--output", default=None, help="Ulostulo XML/dir. Suhteellinen polku ratkaistaan --work-directoryyn nähden.")
-    parser.add_argument("--code-directory", default=".", help="Hakemisto tukitiedostoille (esim. prompt_narrators.txt).")
-    parser.add_argument("--work-directory", default=".", help="Hakemisto työaineistolle (input/output).")
-    parser.add_argument("--narrators-file", default="prompt_narrators.txt", help="Narrators JSON. Suhteellinen polku ratkaistaan --code-directoryyn nähden.")
-    parser.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai")
-    parser.add_argument("--debug-speakers", action="store_true")
-    parser.add_argument("--openai-model", default="gpt-4.1-mini")
-    parser.add_argument("--openai-profile-variant", default=None)
-    parser.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, help="true=tuota puhujakohtainen/polyfoninen SSML, false=tuota pitkät yhden kertojan fragmentit.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extract one chapter from a DOCX manuscript and generate SSML for audiobook rendering. "
+            "By default the script creates long single-narrator fragments. "
+            "Speaker-specific/polyphonic SSML is available with --use-multipolyfony true."
+        ),
+        formatter_class=HelpFormatter,
+        epilog="""Examples:
+  Single-narrator SSML, normal production mode:
+    python3 tee_aanikasikirjoitus.py \\
+      --input manuscript.docx \\
+      --content 2.5 \\
+      --output /tmp/abook \\
+      --narrators-file prompt_narrators.txt
+
+  Polyphonic / speaker-specific SSML:
+    python3 tee_aanikasikirjoitus.py \\
+      --input manuscript.docx \\
+      --content 2.5 \\
+      --output /tmp/abook \\
+      --narrators-file prompt_narrators.txt \\
+      --use-multipolyfony true \\
+      --speaker-detection openai \\
+      --debug-speakers""",
+    )
+    required = parser.add_argument_group("required input")
+    required.add_argument("--input", required=True, metavar="DOCX", help="Input manuscript .docx file. Relative paths are resolved against --work-directory.")
+
+    chapter = parser.add_argument_group("chapter selection")
+    chapter.add_argument("--content", metavar="ACT.CHAPTER", default=None, help="Chapter identifier to extract, for example 2.5. Optional, but normally used for real manuscript chapters. If omitted, the whole document is used.")
+
+    paths = parser.add_argument_group("paths")
+    paths.add_argument("--output", metavar="PATH", default=None, help="Output SSML file or output directory. If a directory is given, the file name is generated from --content and the chapter title. Relative paths are resolved against --work-directory.")
+    paths.add_argument("--code-directory", metavar="DIR", default=".", help="Directory for support files such as prompt_narrators.txt.")
+    paths.add_argument("--work-directory", metavar="DIR", default=".", help="Base directory for manuscript input and SSML output paths.")
+    paths.add_argument("--narrators-file", metavar="JSON", default="prompt_narrators.txt", help="Narrator/voice configuration JSON. Relative paths are resolved against --code-directory.")
+
+    mode = parser.add_argument_group("generation mode")
+    mode.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, metavar="BOOL", help="Use speaker-specific/polyphonic SSML. false creates long single-narrator Kertoja fragments and is the normal production mode. Accepted values: true/false, yes/no, 1/0, on/off.")
+
+    speaker = parser.add_argument_group("speaker detection, used mainly with --use-multipolyfony true")
+    speaker.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai", help="Speaker attribution method for polyphonic SSML.")
+    speaker.add_argument("--debug-speakers", action="store_true", help="Print detected segments, speakers, language and OpenAI profile information.")
+    speaker.add_argument("--openai-model", default="gpt-4.1-mini", help="OpenAI model used for speaker attribution.")
+    speaker.add_argument("--openai-profile-variant", default=None, metavar="VARIANT", help="Optional narrator profile variant, for example fi_ash or fi_fable, if such variants exist in prompt_narrators.txt.")
     args = parser.parse_args()
     try:
         code_directory = Path(args.code_directory).expanduser()
