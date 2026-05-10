@@ -11,6 +11,7 @@ import os
 import random
 import re
 import sys
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +37,9 @@ INTER_CHUNK_BREAK = "0.4s"
 INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF\U000024C2-\U0001F251]+", flags=re.UNICODE)
 CHAT_LINE_RE = re.compile(r"^\s*\[([^\]\n]{1,64})\]\s*:\s*(.+?)\s*$")
+
+ADAPTATION_STYLES = ("none", "light", "immersive", "dramatic")
+LIGHT_SUPPORTED_STYLE = "light"
 
 SPEECH_VERB_ROOTS = {
     "finnish": ["sano", "kysy", "vasta", "huuda", "totea", "juttele", "mainitse", "kommentoi", "kuiska", "karju", "mumise", "lausu", "selitä", "ilmoita", "myönnä", "kiistä", "toista", "mutise", "hihku", "naurahda", "neuvo", "täydentä", "jatka", "lisä", "toka", "huikka", "kerro"],
@@ -929,6 +933,105 @@ def attribute_speakers_with_openai(text: str, narrators: dict[str, str], alias_m
         out.append(seg)
     return out
 
+def is_chat_pipeline_segment(segment: ScriptSegment) -> bool:
+    return segment.type.startswith("chat_") or segment.speaker.startswith("chat")
+
+
+def split_sentences_conservative(text: str) -> list[str]:
+    protected = {"esim.", "jne.", "tms.", "mm.", "ns."}
+    sentences: list[str] = []
+    start = 0
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch not in ".!?":
+            i += 1
+            continue
+        prev_char = text[i - 1] if i > 0 else ""
+        next_char = text[i + 1] if i + 1 < len(text) else ""
+        if ch == "." and prev_char.isdigit() and next_char.isdigit():
+            i += 1
+            continue
+        token_start = i
+        while token_start > 0 and not text[token_start - 1].isspace():
+            token_start -= 1
+        token = text[token_start : i + 1].lower()
+        if token in protected:
+            i += 1
+            continue
+        if re.fullmatch(r"[A-ZÅÄÖa-zåäö]\.", token):
+            i += 1
+            continue
+        if re.search(r"https?://", text[max(0, token_start - 8) : i + 8], flags=re.IGNORECASE):
+            i += 1
+            continue
+        part = text[start : i + 1].strip()
+        if part:
+            sentences.append(part)
+        start = i + 1
+        while start < len(text) and text[start].isspace():
+            start += 1
+        i = start
+    tail = text[start:].strip()
+    if tail:
+        sentences.append(tail)
+    return sentences
+
+
+def apply_audio_adaptation(
+    fragments: list[ScriptSegment],
+    adaptation_style: str,
+    main_language: str,
+    options: argparse.Namespace,
+    chapter_label: str | None = None,
+) -> tuple[list[ScriptSegment], list[dict[str, object]]]:
+    if adaptation_style == "none":
+        return list(fragments), []
+
+    adapted: list[ScriptSegment] = []
+    debug_rows: list[dict[str, object]] = []
+    for frag in fragments:
+        base = {"fragment_id": frag.segment_id, "fragment_type": frag.type, "speaker": frag.speaker, "language": main_language, "original_text": frag.text}
+        if is_chat_pipeline_segment(frag) or frag.type == "audio_cue":
+            adapted.append(frag)
+            debug_rows.append({**base, "adapted_text": frag.text, "changes": ["skipped_chat" if is_chat_pipeline_segment(frag) else "skipped_effect"], "risk_level": "safe", "skipped": True, "skip_reason": "chat_pipeline" if is_chat_pipeline_segment(frag) else "effect_fragment"})
+            continue
+        text = frag.text
+        changes: list[str] = []
+        chunks = split_sentences_conservative(text)
+        if frag.type == "narration" and len(text) > 350 and len(chunks) > 1:
+            split_text = f' <break time="0.35s"/> '.join(chunks)
+            adapted.append(ScriptSegment(segment_id=frag.segment_id, type=frag.type, speaker=frag.speaker, text=split_text, confidence=frag.confidence))
+            changes.extend(["split_long_fragment", "added_break"])
+        elif frag.type == "narration" and len(chunks) > 1:
+            split_text = f' <break time="0.4s"/> '.join(chunks)
+            adapted.append(ScriptSegment(segment_id=frag.segment_id, type=frag.type, speaker=frag.speaker, text=split_text, confidence=frag.confidence))
+            changes.append("added_break")
+        else:
+            adapted.append(frag)
+        if not changes and frag.type == "dialogue" and text.strip().endswith("?"):
+            changes.append("unchanged")
+        debug_rows.append({**base, "adapted_text": adapted[-1].text, "changes": changes or ["unchanged"], "risk_level": "safe", "skipped": False, "skip_reason": ""})
+    return adapted, debug_rows
+
+
+def write_adaptation_reports(debug_rows: list[dict[str, object]], ssml_output_path: Path, options: argparse.Namespace, chapter_label: str | None, model_used: str) -> None:
+    debug_path = Path(options.adaptation_debug_json) if options.adaptation_debug_json else ssml_output_path.with_name(f"{ssml_output_path.stem}_adaptation_debug.json")
+    review_path = Path(options.adaptation_review_md) if options.adaptation_review_md else ssml_output_path.with_name(f"{ssml_output_path.stem}_adaptation_review.md")
+    debug_path.write_text(json.dumps(debug_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    total = len(debug_rows)
+    changed = sum(1 for row in debug_rows if row.get("changes") != ["unchanged"] and not row.get("skipped"))
+    skipped_chat = sum(1 for row in debug_rows if row.get("skip_reason") == "chat_pipeline")
+    lines = [f"# Adaptation review", "", f"- Chapter/content: {chapter_label or '-'}", f"- Adaptation style: {options.adaptation_style}", f"- Model: {model_used}", f"- Total fragments: {total}", f"- Changed fragments: {changed}", f"- Skipped chat fragments: {skipped_chat}", f"- Rejected changes: 0", ""]
+    for row in debug_rows:
+        if row.get("changes") == ["unchanged"] or row.get("skipped"):
+            continue
+        lines += [f"## Fragment {row.get('fragment_id')}", "", f"Speaker: {row.get('speaker')}", f"Language: {row.get('language')}", f"Changes: {', '.join(row.get('changes', []))}", f"Risk: {row.get('risk_level')}", "", "Original:", str(row.get("original_text", "")), "", "Adapted:", str(row.get("adapted_text", "")), "", "Reason:", "Added conservative listening pauses for clarity.", ""]
+    review_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    print(f"Adaptation debug JSON: {debug_path}")
+    print(f"Adaptation review Markdown: {review_path}")
+
+
 def to_ssml_lines(
     segments: list[ScriptSegment],
     cfg: NarratorConfig,
@@ -944,7 +1047,7 @@ def to_ssml_lines(
         if row.type == "audio_cue":
             out.append(f'<audio src="{html.escape(row.text, quote=True)}"/>')
             continue
-        if row.type == "chat_pause":
+        if row.type in {"chat_pause", "adapt_pause"}:
             out.append(f'<break time="{html.escape(row.text, quote=True)}"/>')
             continue
         if row.type == "chat_nickname":
@@ -1009,7 +1112,9 @@ def to_ssml_lines(
                         f'openai_instructions="{html.escape(instructions, quote=True)}"',
                     ]
                 )
-            out.append(f'<voice {" ".join(attrs)}>{html.escape(tts_chunk)}</voice>')
+            escaped_chunk = html.escape(tts_chunk)
+            escaped_chunk = re.sub(r'&lt;break time=&quot;([0-9.]+s)&quot;/&gt;', r'<break time="\1"/>', escaped_chunk)
+            out.append(f'<voice {" ".join(attrs)}>{escaped_chunk}</voice>')
         if row.type == "chat_message":
             out.append('<break time="0.20s"/>')
         elif i < len(segments)-1:
@@ -1157,6 +1262,10 @@ def main() -> int:
     mode.add_argument("--opening-ambience", default=None, help="Optional ambience cue inserted after the chapter heading, for example cafe_night. Requires --use-ambience true in tee_aanikirja.py to be rendered.")
     mode.add_argument("--opening-ambience-duration", default="5s", help="Duration for --opening-ambience.")
     mode.add_argument("--opening-ambience-volume", default="-24dB", help="Volume for --opening-ambience.")
+    mode.add_argument("--adaptation-style", choices=ADAPTATION_STYLES, default="none", help="Optional audiobook adaptation style for non-chat fragments.")
+    mode.add_argument("--adaptation-model", default=None, help="Optional model name reserved for adaptation passes.")
+    mode.add_argument("--adaptation-debug-json", default=None, help="Optional path for adaptation debug JSON output.")
+    mode.add_argument("--adaptation-review-md", default=None, help="Optional path for adaptation review Markdown output.")
 
     speaker = parser.add_argument_group("speaker detection, used mainly with --use-multipolyfony true")
     speaker.add_argument("--speaker-detection", choices=["openai", "rule_based"], default="openai", help="Speaker attribution method for polyphonic SSML.")
@@ -1196,6 +1305,15 @@ def main() -> int:
             profile = resolve_openai_profile(segment.speaker, language, cfg, variant=args.openai_profile_variant)
             profile_text = profile.profile_id if profile else "-"
             print(f"[{segment.type}] speaker={segment.speaker} profile={profile_text}{conf} text={segment.text!r}")
+    output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
+    out = resolve_output_path(output_arg, args.content, input_path, title)
+    if args.adaptation_style in {"immersive", "dramatic"}:
+        print(f"Warning: adaptation style {args.adaptation_style!r} is not implemented yet; using light.", file=sys.stderr)
+        args.adaptation_style = "light"
+    main_language = dominant_language_from_segments(segments)
+    debug_rows: list[dict[str, object]] = []
+    if args.adaptation_style != "none":
+        segments, debug_rows = apply_audio_adaptation(segments, args.adaptation_style, main_language, args, chapter_label=args.content)
     ssml_lines = to_ssml_lines(segments, cfg, openai_profile_variant=args.openai_profile_variant)
     if args.opening_ambience:
         ssml_lines = insert_opening_ambience_after_first_voice(
@@ -1206,10 +1324,12 @@ def main() -> int:
         )
     ssml = "<speak>\n" + "\n".join(ssml_lines) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
-    output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
-    out = resolve_output_path(output_arg, args.content, input_path, title)
     print(f"Writing SSML to: {out}")
+    ET.fromstring(ssml)
     out.write_text(ssml, encoding="utf-8")
+    if args.adaptation_style != "none":
+        model_used = args.adaptation_model or "deterministic-local-rules"
+        write_adaptation_reports(debug_rows, out, args, args.content, model_used=model_used)
     print(f"Kirjoitettu: {out}")
     return 0
 
