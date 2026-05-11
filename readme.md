@@ -73,3 +73,31 @@ python -m piper.download_voices fi_FI-heidi-low
 
 Skripti yrittää nyt ladata puuttuvan Piper-äänen automaattisesti ensimmäisellä ajokerralla.
 Jos `-medium`-mallia ei löydy, skripti kokeilee automaattisesti vastaavaa `-low`-mallia.
+
+## Äänikäsikirjoituksen adaptation prompt -tiedosto
+
+`tee_aanikasikirjoitus.py` tukee nyt ulkoista adaptation-promptia tyyleille `immersive` ja `dramatic`.
+
+- Uusi valitsin: `--adaptation-prompt-file PATH`
+- Oletus: `prompt_dramatise.txt` (`--code-directory`-hakemistosta)
+- Jos oletuspuuttuu, skripti varoittaa ja käyttää sisäänrakennettua minimipromptia.
+- Jos käyttäjä antaa polun eksplisiittisesti ja tiedosto puuttuu, skripti lopettaa virheeseen.
+
+Esimerkki:
+
+```bash
+python3 /mnt/c/users/ossim/github/om-author/tee_aanikasikirjoitus.py \
+  --content 2.14 \
+  --input "/mnt/c/users/ossim/onedrive/omat/blogit/Murha Twitch-streamissa/Mantylahti_Murder-on-Twitch-stream_INTL_en-gb 3.1 f.docx" \
+  --output /mnt/c/users/ossim/downloads/abook/ \
+  --narrators-file /mnt/c/users/ossim/github/om-author/prompt_narrators.txt \
+  --speaker-detection openai \
+  --openai-model gpt-4.1-mini \
+  --debug-speakers \
+  --adaptation-style immersive \
+  --adaptation-model gpt-4.1-mini \
+  --adaptation-prompt-file /mnt/c/users/ossim/github/om-author/prompt_dramatise.txt \
+  --immersive-audio-cues ssml \
+  --ambient-directory /mnt/c/users/ossim/github/om-author/ambient \
+  --strict-ambient-cues
+```
