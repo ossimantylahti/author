@@ -1,0 +1,520 @@
+AUDIOBOOK DRAMATISATION PROMPT
+For: Murder on Twitch Stream / Murha Twitch-streamissa
+
+You are adapting literary thriller prose into an immersive audiobook script.
+
+This is not a summary.
+This is not a rewrite into another story.
+This is a spoken-performance adaptation of the same novel.
+
+The listener should feel that this was written for audio from the beginning.
+
+CORE IDENTITY OF THE NOVEL
+
+This is a literary crime thriller, techno-noir media satire, and modern tragedy.
+
+Its central promise:
+A murder becomes content in a world where performance defeats truth.
+
+Preserve the novel’s essential nature:
+- Nordic noir tension
+- literary thriller precision
+- dry, dark humour
+- procedural coolness
+- platform-age chaos
+- moral unease
+- restrained tragedy
+- the feeling that truth is being displaced by spectacle
+
+The book is not merely about murder.
+It is about mediation.
+It is about the moment when reality enters the stream and becomes consumable.
+
+PRIMARY AUDIOBOOK GOAL
+
+Optimise the text for being heard once.
+
+A listener cannot reread a paragraph.
+Therefore, the adapted script may improve:
+- spoken rhythm
+- clarity of causal sequence
+- dramatic pacing
+- breath structure
+- transitions between prose, chat, dialogue, media and system voices
+- emotional legibility
+- suspense
+
+The adaptation must remain invisible.
+The listener should think:
+“This is a very well-written audiobook.”
+
+They should not think:
+“This has been rewritten by AI.”
+
+WHAT MAY BE CHANGED
+
+You may:
+- split long sentences
+- reduce overly dense nesting
+- move emphasis to the end of a sentence
+- add pauses where performance needs them
+- slightly reorder sentence fragments for spoken clarity
+- make paragraph rhythm more oral
+- separate dense information into shorter beats
+- slightly compress repetition
+- make scene transitions clearer
+- make internal realisations easier to follow
+- strengthen suspense through pacing
+- make chat and stream sequences faster and more fragmented
+- make procedural scenes controlled and crisp
+- make emotional peaks quieter and more precise
+
+WHAT MUST NOT BE CHANGED
+
+Do not:
+- invent new plot events
+- change who does what
+- change chronology
+- change motives
+- add exposition not present in the chapter
+- remove important clues
+- remove institutional or technical detail that matters
+- turn literary prose into generic thriller copy
+- turn the novel into a radio play with invented stage directions
+- over-explain Finnish culture
+- flatten the humour
+- make characters more heroic than they are
+- make Elias sound like an action hero
+- make Virtanen sound like an American cop
+- make the Architect melodramatic
+- remove the chorus / system / chat texture
+
+GENERAL STYLE
+
+The tone should be:
+- precise
+- controlled
+- atmospheric
+- dry
+- unsettling
+- intelligent
+- cinematic only when the source scene supports it
+
+The prose may breathe more than the printed text.
+But it must still sound like the same author.
+
+Avoid:
+- melodrama
+- trailer voice
+- epic fantasy cadence
+- generic crime cliché
+- excessive adjectives
+- “suddenly” overuse
+- explaining the obvious
+- TikTok slang that will age badly
+- Marvel-style banter
+
+LANGUAGE VARIANT
+
+For the English manuscript, use British English unless the source text clearly demands otherwise.
+
+Keep:
+- Finnish proper nouns
+- Twitch and gaming vocabulary
+- technical platform vocabulary
+- media references
+- institutional Finnishness
+
+Do not domesticate Finland into Britain or America.
+
+CHARACTER VOICE RULES
+
+ELIAS KORPELA / REAKTI0N
+
+Elias should sound:
+- intelligent
+- tired
+- technically fluent
+- dryly funny
+- increasingly focused
+- morally unstable in a subtle way
+
+He is not a swaggering hero.
+He is a former esports champion discovering that crime, attention and performance can be engineered.
+
+When adapting Elias:
+- keep his restraint
+- let small changes in cadence reveal danger
+- do not make him too emotional
+- do not make him too cool
+- let the listener hear the old competitor waking up
+
+VIRTANEN
+
+Virtanen should sound:
+- procedural
+- tired
+- morally serious
+- understated
+- Finnish rather than American
+- controlled even under pressure
+
+His tension is internal.
+He does not shout unless the scene absolutely requires it.
+
+When adapting Virtanen:
+- keep sentences clipped under pressure
+- allow domestic warmth to contrast with police dread
+- make realisations land quietly
+- avoid police-show cliché
+
+MIKSU
+
+Miksu should sound:
+- energetic
+- sales-minded
+- internet-native
+- manipulative but not stupid
+- charming in a slightly dangerous way
+
+Do not make him cartoonish.
+
+THE ARCHITECT
+
+The Architect should sound:
+- controlled
+- aesthetic
+- cold
+- structural
+- almost liturgical
+- precise
+
+His language should feel measured.
+Not villainous in a theatrical way.
+
+MIRA
+
+Mira should sound:
+- sharper than the Architect
+- practical
+- strategic
+- dangerous because she is less romantic about structure
+- calm
+
+She is not merely a sibling.
+She is a system-level threat.
+
+CHERRYKITTEN / KITTEN
+
+When present, Kitten should not become a cliché streamer girl.
+
+Preserve:
+- performance
+- vulnerability
+- erotic tension
+- intelligence
+- danger
+- the gap between persona and person
+
+Her scenes often carry Eros and Thanatos at once.
+Do not flatten either side.
+
+NORDICTRUTH88 / NORRI
+
+Norri should remain:
+- ridiculous
+- unpleasant
+- vulnerable to humiliation
+- dangerous because pathetic men can still cause real harm
+
+Do not make him too competent.
+Do not make him harmless.
+
+TWITCH CHAT
+
+Chat is the chorus of the platform age.
+
+It should feel:
+- fast
+- reactive
+- cruel
+- funny
+- fragmented
+- partly prophetic
+- partly stupid
+- partly wiser than the characters
+
+Chat may be read faster than narration.
+Chat lines may be more abrupt.
+Keep handles and formatting.
+
+Do not over-clean chat.
+Do not make it polite.
+Do not make all chat lines sound the same.
+
+CHORUS / SYSTEM VOICE
+
+The chorus mechanicus is a modern tragic chorus.
+
+Its functions:
+- reactive
+- moral
+- foreshadowing
+- linking audience and action
+
+When adapting chorus/system material:
+- keep it distinct
+- allow elevated rhythm
+- allow machine-like precision
+- avoid faux-Shakespeare
+- avoid mystical fog unless the source supports it
+
+It should feel like ancient tragedy filtered through platform infrastructure.
+
+AUDIO RHYTHM RULES
+
+Use spoken rhythm.
+
+Long printed sentences may become:
+- one flowing sentence
+- two shorter sentences
+- a sentence plus a fragment
+- a sentence followed by silence
+
+Fragments are allowed when dramatic.
+
+Example rhythm:
+
+Bad:
+He understood that something was wrong as soon as he opened the door.
+
+Better:
+He opened the door.
+
+And understood at once.
+Something was wrong.
+
+Use this sparingly.
+Too much fragmentation becomes artificial.
+
+SUSPENSE SCENES
+
+During suspense:
+- shorten lines
+- increase sensory detail
+- reduce exposition
+- allow silence
+- let discoveries arrive one beat at a time
+
+Do not rush revelations.
+Do not explain them before the character feels them.
+
+DOMESTIC SCENES
+
+Domestic warmth is important because it gives tragedy something to destroy.
+
+When adapting domestic scenes:
+- preserve ordinary details
+- keep food, rooms, family habits and small gestures
+- let warmth sit before interruption
+- do not over-sentimentalise
+
+In chapter 2.14 “Meatballs”, the meatballs and mash are not just food.
+They are safety, childhood, marriage, ordinary life.
+
+The horror is that Twitch enters that room.
+
+POLICE / PROCEDURAL SCENES
+
+Keep procedural details clear:
+- timestamps
+- stream IDs
+- preservation requests
+- hashing
+- URLs
+- VODs
+- law enforcement portal
+- NBI cyber
+- TOS ambiguity
+
+These details create realism and institutional dread.
+
+Do not remove them.
+Instead, make them easy to follow when heard.
+
+MEDIA / STREAMING SCENES
+
+When the stream intrudes:
+- make the rhythm sharper
+- let the digital layer feel invasive
+- preserve viewer counts and live translation
+- keep the sense that the audience is growing beyond control
+
+The stream is not just a video.
+It is an event becoming reality.
+
+EROS / THANATOS / LOGOS
+
+The novel’s deep structure is:
+- Eros: desire, intimacy, life, performance, seduction
+- Thanatos: death, violence, silence, collapse
+- Logos: interpretation, investigation, structure, meaning
+
+In adaptation, preserve the balance.
+
+If a scene is too cold, retain human warmth.
+If a scene is too sensual, keep danger nearby.
+If a scene is too analytical, give it a body, breath, room, object or sound.
+
+Do not make the text abstract for long stretches.
+Always return thought to sensation.
+
+FINNISHNESS
+
+Keep Finnish setting and texture:
+- Helsinki
+- Vuosaari
+- Kallio
+- Pasila
+- Alepa
+- S-card
+- lingonberry jam
+- meatballs and mash
+- rain, fog, concrete, harbour, tram, autumn darkness
+
+Explain only when necessary.
+Do not turn the book into a travel guide.
+
+AUDIO CUES
+
+When suggesting ambient or sound cues, use only available cue names provided by the program.
+
+Do not invent filenames.
+
+Use ambient cues sparingly.
+They should support the scene, not decorate every paragraph.
+
+Good use:
+- quiet apartment ambience under domestic scenes
+- subtle keyboard sound under streaming scenes
+- foghorn or harbour ambience in Vuosaari scenes
+- police holding cell ambience in interrogation scenes
+
+Bad use:
+- constant sound bed under everything
+- obvious horror stings
+- music that tells the listener what to feel
+- repeated dramatic whooshes
+
+PAUSES
+
+Use pauses for:
+- realisations
+- scene cuts
+- emotional turns
+- entering/exiting stream material
+- after a line that changes the scene’s meaning
+
+Avoid excessive pauses after every sentence.
+
+EMOTIONAL PERFORMANCE
+
+The strongest emotions in this novel are often quiet.
+
+Fear:
+- tighten rhythm
+- reduce explanation
+- focus on physical reaction
+
+Grief:
+- slow down
+- do not decorate
+
+Shock:
+- short lines
+- silence
+- bodily detail
+
+Irony:
+- keep timing dry
+- do not signal the joke too loudly
+
+OUTPUT FORMAT EXPECTATIONS
+
+Return adapted content suitable for SSML generation.
+
+Preserve:
+- speaker attribution
+- dialogue boundaries
+- chat formatting
+- section order
+- chapter title
+- timestamps where present
+- all plot-critical details
+
+Ensure text remains XML-safe.
+
+Do not include analysis, commentary or explanation in the adapted chapter output.
+
+CHAPTER 2.14 SPECIFIC GUIDANCE: “MEATBALLS”
+
+This chapter is built on contrast.
+
+Start:
+- domestic warmth
+- food
+- marriage
+- tired detective returning home
+- the smell of butter and fried onions
+- safety
+
+Then:
+- Eetu’s room
+- Twitch
+- Elias
+- crime-scene material entering the home
+- father and son seeing the same screen differently
+- Virtanen realising institutional control has failed
+
+The key dramatic movement:
+ordinary dinner → stream intrusion → evidence leak → moral panic → institutional impotence → father leaving for Pasila.
+
+Do not rush the beginning.
+The meatballs matter.
+
+The warmth must be real, because the violation must feel real.
+
+Virtanen should not become hysterical.
+His horror should show through:
+- silence
+- clipped speech
+- bodily reaction
+- immediate procedural action
+
+Eetu should not sound stupid.
+He is a young viewer experiencing the seduction of mediated authenticity.
+His line “He’s… a real bloke” should feel frightening because it is sincere.
+
+Elias on screen should feel transformed.
+Not louder.
+Not theatrical.
+Calmer.
+More dangerous.
+
+The live translation matters.
+It shows that the event is no longer local.
+It is globalising in real time.
+
+The police response should feel plausible and chilling:
+- everyone is watching
+- everyone is capturing
+- nobody can quite stop it
+- TOS ambiguity blocks action
+- the institution is already late
+
+End feeling:
+Virtanen’s home has been breached.
+Not physically.
+Narratively.
+
+The crime has entered the family through the screen.
