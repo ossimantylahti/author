@@ -47,6 +47,13 @@ CHAT_LINE_RE = re.compile(r"^\s*\[([^\]\n]{1,64})\]\s*:\s*(.+?)\s*$")
 
 ADAPTATION_STYLES = ("none", "light", "immersive", "dramatic")
 LIGHT_SUPPORTED_STYLE = "light"
+DEFAULT_ADAPTATION_PROMPT_FILE = "prompt_dramatise.txt"
+MINIMAL_ADAPTATION_STYLE_PROMPT = (
+    "Adapt for audiobook listening with conservative edits only. "
+    "Style can improve rhythm and tone, but preserve all plot facts, dialogue attribution, and chapter structure. "
+    "Do not invent events or remove essential information. "
+    "Return SSML/XML-safe text only."
+)
 
 SPEECH_VERB_ROOTS = {
     "finnish": ["sano", "kysy", "vasta", "huuda", "totea", "juttele", "mainitse", "kommentoi", "kuiska", "karju", "mumise", "lausu", "selitä", "ilmoita", "myönnä", "kiistä", "toista", "mutise", "hihku", "naurahda", "neuvo", "täydentä", "jatka", "lisä", "toka", "huikka", "kerro"],
@@ -1091,6 +1098,42 @@ def build_ambient_catalogue(ambient_dir: Path, base_dir: Path, whitelist: set[st
     return entries
 
 
+
+
+def resolve_adaptation_prompt_path(path_value: str | None, code_directory: Path) -> Path:
+    candidate = Path(path_value or DEFAULT_ADAPTATION_PROMPT_FILE).expanduser()
+    if not candidate.is_absolute():
+        candidate = code_directory / candidate
+    return candidate
+
+
+def load_adaptation_prompt(path: Path, explicitly_provided: bool) -> str:
+    if path.exists() and path.is_file():
+        return path.read_text(encoding="utf-8")
+    if explicitly_provided:
+        raise FileNotFoundError(f"Error: adaptation prompt file not found: {path}")
+    print(f"Warning: adaptation prompt file not found, using built-in minimal prompt: {path}", file=sys.stderr)
+    return MINIMAL_ADAPTATION_STYLE_PROMPT
+
+
+def adapt_fragment_with_openai(text: str, adaptation_style: str, model: str, prompt_style: str) -> str:
+    client = OpenAI()
+    hard_rules = (
+        "Technical constraints: preserve plot facts; output valid SSML/XML-safe text; "
+        "do not invent new events; do not remove essential story information; "
+        "preserve dialogue attribution; keep chapter structure."
+    )
+    system_prompt = f"{hard_rules}\n\nStyle instructions:\n{prompt_style.strip()}"
+    user_prompt = json.dumps({"adaptation_style": adaptation_style, "text": text}, ensure_ascii=False)
+    response = client.responses.create(
+        model=model,
+        input=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return response.output_text.strip() or text
+
 def apply_audio_adaptation(
     fragments: list[ScriptSegment],
     adaptation_style: str,
@@ -1106,6 +1149,8 @@ def apply_audio_adaptation(
     ambience_state = {"last_inserted_cue_src": None, "last_inserted_cue_fragment_id": None}
     catalogue: list[AmbientEntry] = getattr(options, "_ambient_catalogue", [])
     cues_mode = options.immersive_audio_cues
+    style_prompt = getattr(options, "_adaptation_style_prompt", MINIMAL_ADAPTATION_STYLE_PROMPT)
+    adaptation_model = options.adaptation_model
 
     def suggest_ambient(text: str) -> dict[str, Any] | None:
         text_tokens = set(tokenise_text(text))
@@ -1150,6 +1195,14 @@ def apply_audio_adaptation(
             continue
         text = frag.text
         changes: list[str] = []
+        if adaptation_style in {"immersive", "dramatic"} and adaptation_model:
+            try:
+                adapted_text = adapt_fragment_with_openai(text, adaptation_style, adaptation_model, style_prompt)
+                if adapted_text != text:
+                    text = adapted_text
+                    changes.append("llm_rewrite")
+            except Exception as exc:
+                print(f"Warning: adaptation model failed for fragment {frag.segment_id}: {exc}", file=sys.stderr)
         chunks = split_sentences_conservative(text)
         if frag.type == "narration" and len(text) > 350 and len(chunks) > 1:
             split_text = f' <break time="0.35s"/> '.join(chunks)
@@ -1445,7 +1498,8 @@ def main() -> int:
     mode.add_argument("--opening-ambience-duration", default="5s", help="Duration for --opening-ambience.")
     mode.add_argument("--opening-ambience-volume", default="-24dB", help="Volume for --opening-ambience.")
     mode.add_argument("--adaptation-style", choices=ADAPTATION_STYLES, default="none", help="Optional audiobook adaptation style for non-chat fragments.")
-    mode.add_argument("--adaptation-model", default=None, help="Optional model name reserved for adaptation passes.")
+    mode.add_argument("--adaptation-model", default=None, help="Optional model name for adaptation passes.")
+    mode.add_argument("--adaptation-prompt-file", metavar="PATH", default=DEFAULT_ADAPTATION_PROMPT_FILE, help="External adaptation prompt text file. Relative paths are resolved against --code-directory.")
     mode.add_argument("--adaptation-debug-json", default=None, help="Optional path for adaptation debug JSON output.")
     mode.add_argument("--adaptation-review-md", default=None, help="Optional path for adaptation review Markdown output.")
     mode.add_argument("--immersive-audio-cues", choices=["off", "metadata", "ssml"], default="metadata", help="Ambient cue behaviour for immersive adaptation.")
@@ -1493,10 +1547,18 @@ def main() -> int:
             print(f"[{segment.type}] speaker={segment.speaker} profile={profile_text}{conf} text={segment.text!r}")
     output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
     out = resolve_output_path(output_arg, args.content, input_path, title)
-    if args.adaptation_style in {"dramatic"}:
-        print(f"Warning: adaptation style {args.adaptation_style!r} is not implemented yet; using light.", file=sys.stderr)
-        args.adaptation_style = "light"
     output_base = out.parent if out.suffix else out
+    explicit_adaptation_prompt = "--adaptation-prompt-file" in sys.argv
+    if args.adaptation_style in {"immersive", "dramatic"}:
+        adaptation_prompt_path = resolve_adaptation_prompt_path(args.adaptation_prompt_file, code_directory)
+        print(f"Adaptation prompt file: {adaptation_prompt_path}")
+        try:
+            args._adaptation_style_prompt = load_adaptation_prompt(adaptation_prompt_path, explicitly_provided=explicit_adaptation_prompt)
+        except FileNotFoundError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    else:
+        args._adaptation_style_prompt = MINIMAL_ADAPTATION_STYLE_PROMPT
     ambient_dir = Path(args.ambient_directory).expanduser() if args.ambient_directory else (output_base / "ambient")
     if not ambient_dir.exists() and args.ambient_directory is None:
         ambient_dir = Path("./ambient").resolve()
