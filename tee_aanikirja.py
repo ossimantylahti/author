@@ -32,6 +32,7 @@ MAX_TEXT_LEN = 10000
 DEFAULT_CHUNK_LIMIT = MAX_RENDERER_CHUNK_LIMIT
 NARRATOR_NAME = "Kertoja"
 MODEL_MAP = {"v2": "eleven_multilingual_v2", "v3": "eleven_v3"}
+DEFAULT_DEEPGRAM_MODEL = "aura-2-thalia-en"
 AUDIO_TAG_RE = re.compile(
     r'<audio\s+[^>]*src="([^"]+)"[^>]*/>',
     flags=re.IGNORECASE,
@@ -667,6 +668,7 @@ def extract_voice_attrs(text: str) -> dict[str, str]:
         "openai_instructions",
         "kokoro_voice",
         "piper_voice",
+        "deepgram_model",
         "language",
         "emotion",
         "pace",
@@ -1053,7 +1055,7 @@ def ensure_ffmpeg_installed() -> None:
 
 
 def ensure_renderer_installed(renderer: str) -> None:
-    if renderer in {"elevenlabs", "openai"}:
+    if renderer in {"elevenlabs", "openai", "deepgram"}:
         return
     binary = "piper" if renderer == "piper" else "kokoro-tts"
     if shutil.which(binary):
@@ -1259,7 +1261,64 @@ def detect_kokoro_fallback_language(text: str, cli_language: str | None) -> str:
     return "en-us"
 
 
-def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_maps: dict[str, list[tuple[re.Pattern[str], str, str]]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None, cli_language: str | None = None, piper_data_dir: Path | None = None) -> str:
+def ensure_deepgram_ready() -> None:
+    try:
+        importlib.import_module("requests")
+    except ModuleNotFoundError as e:
+        raise RuntimeError("Deepgram renderer requires the 'requests' package. Install it with: pip install requests") from e
+
+
+def resolve_deepgram_model(
+    text: str,
+    speaker: str,
+    narrators: dict[str, Any],
+    cli_deepgram_model: str | None,
+) -> str:
+    attrs = extract_voice_attrs(text)
+    ssml_model = (attrs.get("deepgram_model") or "").strip()
+    if ssml_model:
+        return ssml_model
+    profile = (narrators.get("voices", {}) if isinstance(narrators.get("voices", {}), dict) else {}).get(speaker, {})
+    if isinstance(profile, dict):
+        profile_model = profile.get("deepgram_model")
+        if isinstance(profile_model, str) and profile_model.strip():
+            return profile_model.strip()
+    kertoja_profile = (narrators.get("voices", {}) if isinstance(narrators.get("voices", {}), dict) else {}).get(NARRATOR_NAME, {})
+    if isinstance(kertoja_profile, dict):
+        profile_model = kertoja_profile.get("deepgram_model")
+        if isinstance(profile_model, str) and profile_model.strip():
+            return profile_model.strip()
+    if cli_deepgram_model and cli_deepgram_model.strip():
+        return cli_deepgram_model.strip()
+    return DEFAULT_DEEPGRAM_MODEL
+
+
+def render_with_deepgram(text: str, output_path: Path, model: str, api_key: str, timeout: int = 60) -> None:
+    import requests
+
+    payload = {"text": text}
+    headers = {
+        "Authorization": f"Token {api_key}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        f"https://api.deepgram.com/v1/speak?model={model}",
+        headers=headers,
+        json=payload,
+        timeout=timeout,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Deepgram TTS failed with HTTP {response.status_code}: {response.text}")
+    if not response.content:
+        raise RuntimeError("Deepgram TTS returned an empty response body.")
+    content_type = (response.headers.get("content-type") or "").lower()
+    if "json" in content_type:
+        raise RuntimeError(f"Deepgram TTS returned JSON instead of audio: {response.text}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(response.content)
+
+
+def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, audio_format: str, pronunciation_maps: dict[str, list[tuple[re.Pattern[str], str, str]]] | None = None, kokoro_model: str | None = None, kokoro_voices: str | None = None, cli_language: str | None = None, piper_data_dir: Path | None = None, deepgram_model: str | None = None, deepgram_api_key: str | None = None) -> str:
     if renderer == "openai":
         client = OpenAI()
         ssml_voice, ssml_model, ssml_instructions = extract_openai_ssml_options(text)
@@ -1337,6 +1396,23 @@ def synthesize_local(renderer: str, voice_id: str, text: str, out_path: Path, au
                 return resolved_voice
             raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{resolved_voice}': {retry.stderr.strip() or retry.stdout.strip()}")
         raise RuntimeError(f"Piper-ajo epäonnistui äänellä '{voice_id}': {proc.stderr.strip() or proc.stdout.strip()}")
+
+    if renderer == "deepgram":
+        fragment_language = detect_fragment_language(text, cli_language)
+        if fragment_language == "fi-FI":
+            print(
+                "Warning: Deepgram Aura does not currently support Finnish TTS according to public documentation. Rendering will continue with the selected Deepgram model."
+            )
+        plain_text = strip_ssml_tags(text).strip()
+        if not plain_text:
+            return voice_id
+        resolved_model = (deepgram_model or DEFAULT_DEEPGRAM_MODEL).strip() or DEFAULT_DEEPGRAM_MODEL
+        if not deepgram_api_key:
+            raise RuntimeError("DEEPGRAM_API_KEY is required for Deepgram rendering.")
+        print(f"Deepgram model: {resolved_model}")
+        print(f"Output file: {out_path}")
+        render_with_deepgram(plain_text, out_path, resolved_model, deepgram_api_key, timeout=60)
+        return voice_id
 
     fragment_language = detect_fragment_language(text, cli_language)
     text = apply_pronunciation_aliases(text, (pronunciation_maps or {}).get(fragment_language, []))
@@ -1510,7 +1586,7 @@ class HelpFormatter(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=("Render an SSML audiobook script into audio using ElevenLabs, OpenAI TTS, Piper or Kokoro. By default the renderer uses a single Kertoja voice unless --use-multipolyfony true is given."),
+        description=("Render an SSML audiobook script into audio using ElevenLabs, OpenAI TTS, Piper, Kokoro or Deepgram. By default the renderer uses a single Kertoja voice unless --use-multipolyfony true is given."),
         formatter_class=HelpFormatter,
         epilog="""Examples:
   Render normal single-narrator audiobook audio with OpenAI TTS:
@@ -1570,11 +1646,12 @@ def main() -> int:
     paths.add_argument("--ambient-directory", default="ambient", help="Directory containing immersive <audio src=\"cue_name\"/> MP3 files. Relative paths are resolved against --code-directory.")
     paths.add_argument("--ambience-manifest", default="ambience/ambience_manifest.json", help="JSON manifest mapping ambience/sfx names to audio files and default mixing settings. Relative paths are resolved against --code-directory.")
     renderer = parser.add_argument_group("renderer")
-    renderer.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper", help="TTS backend.")
+    renderer.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai", "deepgram"], default="piper", help="TTS backend.")
     renderer.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, metavar="BOOL", help="Use SSML speaker-specific voices. false forces all fragments to the Kertoja voice and is the normal production mode. Accepted values: true/false, yes/no, 1/0, on/off.")
     renderer.add_argument("--chunk-limit", type=int, default=DEFAULT_CHUNK_LIMIT, metavar="N", help="Maximum characters per renderer chunk. Keep at or below 4000 for safety.")
     renderer.add_argument("--language", metavar="LANG", default=None, help="Pronunciation dictionary fallback language, for example fi-FI, en-GB, en-US or es-MX. Normally inferred from SSML language attributes.")
     renderer.add_argument("--use-ambience", type=parse_bool_arg, default=False, help=("Enable custom <ambient> and <sfx> tags in SSML. If false, ambience tags are ignored/removed before TTS rendering."))
+    renderer.add_argument("--deepgram-model", default=DEFAULT_DEEPGRAM_MODEL, help="Default Deepgram Aura model, for example aura-2-thalia-en.")
     eleven = parser.add_argument_group("ElevenLabs options")
     eleven.add_argument("--model", choices=["v2", "v3"], default="v2", help="ElevenLabs model family.")
     eleven.add_argument("--model-id", default=None, metavar="MODEL_ID", help="Explicit ElevenLabs model id. If omitted, --model is mapped to the default model id.")
@@ -1674,6 +1751,8 @@ def main() -> int:
             validate_kokoro_voices(content)
         elif args.renderer == "piper":
             ensure_piper_ready(content, narrators, args.voice_id, Path(args.data_dir).expanduser() / "piper")
+        elif args.renderer == "deepgram":
+            ensure_deepgram_ready()
     except RuntimeError as e:
         print(f"Virhe: {e}", file=sys.stderr)
         return 2
@@ -1797,6 +1876,11 @@ def main() -> int:
         remaining_credits = check_credit_balance(api_key)
         if remaining_credits is not None and remaining_credits < 10000:
             print(f"Varoitus: ElevenLabs-krediittejä jäljellä vain {remaining_credits} (< 10000).", file=sys.stderr)
+    elif args.renderer == "deepgram":
+        api_key = os.getenv("DEEPGRAM_API_KEY", "")
+        if not api_key:
+            print("Error: DEEPGRAM_API_KEY is missing from the environment.", file=sys.stderr)
+            return 2
 
     out_dir = resolve_work_path(args.out_dir, work_directory)
     parts_dir = resolve_unique_parts_dir(out_dir)
@@ -1853,7 +1937,8 @@ def main() -> int:
                     if args.renderer == "elevenlabs":
                         synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
-                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_maps, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper")
+                        deepgram_model = resolve_deepgram_model(before, speaker, narrators, args.deepgram_model)
+                        chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_maps, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper", deepgram_model, api_key)
                 except QuotaExceededError as e:
                     print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
                     quota_exhausted = True
@@ -1934,7 +2019,8 @@ def main() -> int:
                         frag_attrs = extract_voice_attrs(frag_text)
                         print(f"[{part_no}] -> {out_path} ({len(frag_text)} merkkiä) speaker={speaker} voice={resolved_voice_id} voice_source={resolved_voice_source} ssml_language={normalise_ssml_language(frag_attrs.get('language')) or 'unknown'}")
                         render_text = frag_text if args.renderer == "piper" else clean_text
-                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, render_text, out_path, args.format, pronunciation_maps, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper")
+                        deepgram_model = resolve_deepgram_model(frag_text, speaker, narrators, args.deepgram_model)
+                        chunk_voice_id = synthesize_local(args.renderer, resolved_voice_id, render_text, out_path, args.format, pronunciation_maps, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper", deepgram_model, api_key)
                     part_no += 1
         except QuotaExceededError as e:
             print(f"Krediitit loppuivat kesken: {e}", file=sys.stderr)
