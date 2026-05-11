@@ -173,7 +173,7 @@ def safe_audio_cue_name(value: str) -> str:
     stem = re.sub(r"_+", "_", stem)
     stem = stem.strip("_")
     if not stem:
-        raise ValueError(f"Invalid audio cue name from value: {value!r}")
+        raise ValueError(f"Invalid audio cue name derived from {value!r}")
     return stem
 
 
@@ -206,17 +206,23 @@ def build_ambient_cue_index(ambient_directory: Path | None) -> dict[str, Path]:
 def resolve_audio_cue_path(
     script_dir: Path,
     cue_name: str,
-    ambient_cue_index: dict[str, Path],
-    ambient_directory: Path | None,
     work_directory: Path,
+    ambient_directory: Path | None,
+    code_directory: Path,
+    ambient_cue_index: dict[str, Path],
 ) -> tuple[Path | None, list[Path]]:
     safe_name = normalise_audio_cue_name(cue_name)
-    tried = [script_dir / f"{safe_name}.mp3"]
+    tried: list[Path] = []
+
+    def append_candidate(candidate: Path) -> None:
+        if candidate not in tried:
+            tried.append(candidate)
+
+    append_candidate(script_dir / f"{safe_name}.mp3")
+    append_candidate(work_directory / f"{safe_name}.mp3")
     if ambient_directory:
-        direct_ambient = ambient_directory / f"{safe_name}.mp3"
-        if direct_ambient not in tried:
-            tried.append(direct_ambient)
-    tried.append(work_directory / f"{safe_name}.mp3")
+        append_candidate(ambient_directory / f"{safe_name}.mp3")
+    append_candidate(code_directory / "ambient" / f"{safe_name}.mp3")
 
     for candidate in tried:
         if candidate.exists():
@@ -224,23 +230,30 @@ def resolve_audio_cue_path(
 
     indexed = ambient_cue_index.get(safe_name)
     if indexed and indexed.exists():
-        return indexed, tried + [indexed]
+        return indexed, tried
+
     return None, tried
 
 
 def validate_audio_cue_files(
     cue_names: list[str],
     script_dir: Path,
-    ambient_cue_index: dict[str, Path],
-    ambient_directory: Path | None,
     work_directory: Path,
-) -> None:
+    ambient_directory: Path | None,
+    code_directory: Path,
+    ambient_cue_index: dict[str, Path],
+) -> dict[str, Path]:
     missing: list[tuple[str, list[Path]]] = []
+    resolved_paths: dict[str, Path] = {}
 
     for cue_name in cue_names:
-        resolved, tried = resolve_audio_cue_path(script_dir, cue_name, ambient_cue_index, ambient_directory, work_directory)
+        resolved, tried = resolve_audio_cue_path(
+            script_dir, cue_name, work_directory, ambient_directory, code_directory, ambient_cue_index
+        )
         if not resolved:
             missing.append((cue_name, tried))
+        else:
+            resolved_paths[cue_name] = resolved
 
     if missing:
         lines = ["Missing required audio cue file(s):"]
@@ -248,7 +261,12 @@ def validate_audio_cue_files(
             lines.append(f"  cue: {cue}")
             lines.append("  tried:")
             lines.extend([f"    {p}" for p in tried])
+        if ambient_directory and not ambient_directory.exists():
+            lines.append("  Ambient directory does not exist:")
+            lines.append(f"    {ambient_directory}")
         raise FileNotFoundError("\n".join(lines))
+
+    return resolved_paths
 
 
 def parse_duration(value: str | None, default_s: float | None = None) -> float | None:
@@ -1549,7 +1567,7 @@ def main() -> int:
     paths.add_argument("--pronunciation-dictionary", metavar="JSON", default=None, help="Local pronunciation dictionary used especially for OpenAI, Piper and Kokoro. Relative paths are resolved against --code-directory.")
     paths.add_argument("--data-dir", metavar="DIR", default=str(Path.home() / ".cache" / "om-author"), help="Directory for downloaded runtime assets such as Kokoro and Piper models.")
     paths.add_argument("--ambience-directory", default="ambience", help="Directory containing ambience and sound effect audio files. Relative paths are resolved against --code-directory.")
-    paths.add_argument("--ambient-directory", default=None, help="Directory containing immersive <audio src=\"cue_name\"/> MP3 files. Relative paths are resolved against --code-directory.")
+    paths.add_argument("--ambient-directory", default="ambient", help="Directory containing immersive <audio src=\"cue_name\"/> MP3 files. Relative paths are resolved against --code-directory.")
     paths.add_argument("--ambience-manifest", default="ambience/ambience_manifest.json", help="JSON manifest mapping ambience/sfx names to audio files and default mixing settings. Relative paths are resolved against --code-directory.")
     renderer = parser.add_argument_group("renderer")
     renderer.add_argument("--renderer", choices=["elevenlabs", "piper", "kokoro", "openai"], default="piper", help="TTS backend.")
@@ -1591,9 +1609,11 @@ def main() -> int:
     script_dir = script_path.parent
     content = input_path.read_text(encoding="utf-8").strip()
     audio_cue_names = collect_audio_cue_names(content)
-    ambient_directory = resolve_code_path(args.ambient_directory, code_directory) if args.ambient_directory else None
+    ambient_directory = resolve_code_path(args.ambient_directory, code_directory)
     ambient_cue_index = build_ambient_cue_index(ambient_directory)
-    validate_audio_cue_files(audio_cue_names, script_dir, ambient_cue_index, ambient_directory, work_directory)
+    resolved_audio_cue_paths = validate_audio_cue_files(
+        audio_cue_names, script_dir, work_directory, ambient_directory, code_directory, ambient_cue_index
+    )
     cue_items = extract_audio_cues_from_ssml(content)
     cue_count = sum(1 for t, _ in cue_items if t == "cue")
     if not args.use_ambience and cue_count:
@@ -1731,7 +1751,7 @@ def main() -> int:
         if audio_cue_names:
             print("Audio cues referenced in SSML:")
             for cue_name in audio_cue_names:
-                resolved, _ = resolve_audio_cue_path(script_dir, cue_name, ambient_cue_index, ambient_directory, work_directory)
+                resolved, _ = resolve_audio_cue_path(script_dir, cue_name, work_directory, ambient_directory, code_directory, ambient_cue_index)
                 print(f"  {cue_name} -> {resolved}")
         if args.use_ambience and cue_count and ambience_manifest:
             print("Audio cues:")
@@ -1844,8 +1864,9 @@ def main() -> int:
                 part_no += 1
 
             cue_name = normalise_audio_cue_name(audio_m.group(1))
-            cue_src, tried = resolve_audio_cue_path(script_dir, cue_name, ambient_cue_index, ambient_directory, work_directory)
-            if not cue_src:
+            cue_src = resolved_audio_cue_paths.get(cue_name)
+            if not cue_src or not cue_src.exists():
+                cue_src, tried = resolve_audio_cue_path(script_dir, cue_name, work_directory, ambient_directory, code_directory, ambient_cue_index)
                 tried_paths = "\n".join(f"  - {p}" for p in tried)
                 raise FileNotFoundError(f"Audio cue file disappeared during render for cue '{cue_name}'. Tried:\n{tried_paths}")
             out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
