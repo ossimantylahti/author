@@ -117,8 +117,19 @@ class AmbientEntry:
     src: str
     filename: str
     stem: str
+    cue_name: str
     tokens: list[str]
     metadata: dict[str, str]
+
+
+def safe_audio_cue_name(value: str) -> str:
+    stem = Path(value).stem
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", stem)
+    stem = re.sub(r"_+", "_", stem)
+    stem = stem.strip("_")
+    if not stem:
+        raise ValueError(f"Invalid audio cue name from value: {value!r}")
+    return stem
 
 
 def clean_chat_nickname(nickname: str) -> str:
@@ -1065,8 +1076,18 @@ def build_ambient_catalogue(ambient_dir: Path, base_dir: Path, whitelist: set[st
         tokens: set[str] = set()
         for source in token_sources:
             tokens.update(tokenise_text(source))
-        src = str(file_path.relative_to(base_dir)) if file_path.is_relative_to(base_dir) else str(file_path)
-        entries.append(AmbientEntry(path=str(file_path), src=src.replace("\\", "/"), filename=file_path.name, stem=file_path.stem, tokens=sorted(tokens), metadata=metadata))
+        cue_name = safe_audio_cue_name(file_path.name)
+        entries.append(
+            AmbientEntry(
+                path=str(file_path),
+                src=cue_name,
+                filename=file_path.name,
+                stem=file_path.stem,
+                cue_name=cue_name,
+                tokens=sorted(tokens),
+                metadata=metadata,
+            )
+        )
     return entries
 
 
