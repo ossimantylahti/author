@@ -45,6 +45,51 @@ INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF\U000024C2-\U0001F251]+", flags=re.UNICODE)
 CHAT_LINE_RE = re.compile(r"^\s*\[([^\]\n]{1,64})\]\s*:\s*(.+?)\s*$")
 
+
+BREAK_MARKER_RE = re.compile(r"\[\[BREAK:([0-9]+(?:\.[0-9]+)?s)\]\]")
+BROKEN_BREAK_RE = re.compile(r'(?:&lt;\s*)?break\s+time\s*=\s*(?:&quot;|")?([0-9]+(?:\.[0-9]+)?s)(?:&quot;|")?\s*/?\s*(?:&gt;|>)?', flags=re.IGNORECASE)
+LONE_BREAK_TAIL_RE = re.compile(r'time\s*=\s*(?:&quot;|")([0-9]+(?:\.[0-9]+)?s)(?:&quot;|")\s*/&gt;', flags=re.IGNORECASE)
+STANDALONE_SPEAKER_TAG_RE = re.compile(r"^\s*<\s*[A-ZÅÄÖa-zåäö][^>]{0,80}\s*>\s*$")
+STANDALONE_PAREN_LINE_RE = re.compile(r"^\s*\([^)]{1,120}\)\s*$")
+UNSAFE_TEXT_PATTERNS = ["&lt;", "&gt;", "time=&quot;", "/&gt;", "<voice", "</voice", "<break"]
+
+
+def sanitise_adapted_text_for_ssml(text: str) -> str:
+    raw = text or ""
+    unescaped = html.unescape(raw)
+    unescaped = LONE_BREAK_TAIL_RE.sub(lambda m: f" [[BREAK:{m.group(1)}]] ", unescaped)
+    unescaped = re.sub(r'<\s*break\s+time\s*=\s*"?([0-9]+(?:\.[0-9]+)?s)"?\s*/\s*>', lambda m: f" [[BREAK:{m.group(1)}]] ", unescaped, flags=re.IGNORECASE)
+    unescaped = BROKEN_BREAK_RE.sub(lambda m: f" [[BREAK:{m.group(1)}]] ", unescaped)
+    unescaped = re.sub(r"<\s*/?\s*voice\b[^>]*>", " ", unescaped, flags=re.IGNORECASE)
+
+    cleaned_lines: list[str] = []
+    for line in unescaped.splitlines():
+        stripped = line.strip()
+        if STANDALONE_SPEAKER_TAG_RE.match(stripped):
+            continue
+        if STANDALONE_PAREN_LINE_RE.match(stripped):
+            continue
+        cleaned_lines.append(line)
+
+    cleaned = "\n".join(cleaned_lines)
+    cleaned = re.sub(r"<[^>]{0,120}>", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(r"(\[\[BREAK:[0-9.]+s\]\])\s+(?=\.|,|;|:|\?|!)", r"\1", cleaned)
+    return cleaned
+
+
+def split_text_and_break_markers(text: str) -> list[tuple[str, str]]:
+    parts: list[tuple[str, str]] = []
+    pos = 0
+    for m in BREAK_MARKER_RE.finditer(text):
+        if m.start() > pos:
+            parts.append(("text", text[pos:m.start()]))
+        parts.append(("break", m.group(1)))
+        pos = m.end()
+    if pos < len(text):
+        parts.append(("text", text[pos:]))
+    return parts
+
 ADAPTATION_STYLES = ("none", "light", "immersive", "dramatic")
 LIGHT_SUPPORTED_STYLE = "light"
 DEFAULT_ADAPTATION_PROMPT_FILE = "prompt_dramatise.txt"
@@ -52,7 +97,7 @@ MINIMAL_ADAPTATION_STYLE_PROMPT = (
     "Adapt for audiobook listening with conservative edits only. "
     "Style can improve rhythm and tone, but preserve all plot facts, dialogue attribution, and chapter structure. "
     "Do not invent events or remove essential information. "
-    "Return SSML/XML-safe text only."
+    "Return plain adapted prose only (no XML/SSML tags, no escaped XML entities)."
 )
 
 SPEECH_VERB_ROOTS = {
@@ -1119,9 +1164,10 @@ def load_adaptation_prompt(path: Path, explicitly_provided: bool) -> str:
 def adapt_fragment_with_openai(text: str, adaptation_style: str, model: str, prompt_style: str) -> str:
     client = OpenAI()
     hard_rules = (
-        "Technical constraints: preserve plot facts; output valid SSML/XML-safe text; "
-        "do not invent new events; do not remove essential story information; "
-        "preserve dialogue attribution; keep chapter structure."
+        "Technical constraints: preserve plot facts; return plain prose only; "
+        "do not output XML/SSML tags or escaped XML; do not invent new events; "
+        "do not remove essential story information; preserve dialogue attribution and chapter structure; "
+        "do not output screenplay format, speaker labels in angle brackets, or standalone stage directions."
     )
     system_prompt = f"{hard_rules}\n\nStyle instructions:\n{prompt_style.strip()}"
     user_prompt = json.dumps({"adaptation_style": adaptation_style, "text": text}, ensure_ascii=False)
@@ -1198,8 +1244,14 @@ def apply_audio_adaptation(
         if adaptation_style in {"immersive", "dramatic"} and adaptation_model:
             try:
                 adapted_text = adapt_fragment_with_openai(text, adaptation_style, adaptation_model, style_prompt)
-                if adapted_text != text:
-                    text = adapted_text
+                sanitised_text = sanitise_adapted_text_for_ssml(adapted_text)
+                available_ambient_cue_names = {entry.src for entry in catalogue}
+                if sanitised_text.strip() in available_ambient_cue_names:
+                    print(f"Warning: adaptation output looked like cue name for fragment {frag.segment_id}; using original prose.", file=sys.stderr)
+                    sanitised_text = text
+                    changes.append("rejected_cue_name_adaptation")
+                if sanitised_text != text:
+                    text = sanitised_text
                     changes.append("llm_rewrite")
             except Exception as exc:
                 print(f"Warning: adaptation model failed for fragment {frag.segment_id}: {exc}", file=sys.stderr)
@@ -1228,7 +1280,7 @@ def apply_audio_adaptation(
                     changes.append("inserted_ambient_cue")
         if not changes and frag.type == "dialogue" and text.strip().endswith("?"):
             changes.append("unchanged")
-        debug_rows.append({**base, "adapted_text": adapted[-1].text, "changes": changes or ["unchanged"], "risk_level": "safe", "skipped": False, "skip_reason": "", "immersive_cues_suggested": suggested, "immersive_cues_inserted": inserted})
+        debug_rows.append({**base, "adapted_text": text, "changes": changes or ["unchanged"], "risk_level": "safe", "skipped": False, "skip_reason": "", "immersive_cues_suggested": suggested, "immersive_cues_inserted": inserted})
     return adapted, debug_rows
 
 
@@ -1347,9 +1399,16 @@ def to_ssml_lines(
                         f'openai_instructions="{html.escape(instructions, quote=True)}"',
                     ]
                 )
-            escaped_chunk = html.escape(tts_chunk)
-            escaped_chunk = re.sub(r'&lt;break time=&quot;([0-9.]+s)&quot;/&gt;', r'<break time="\1"/>', escaped_chunk)
-            out.append(f'<voice {" ".join(attrs)}>{escaped_chunk}</voice>')
+            sanitised_chunk = sanitise_adapted_text_for_ssml(tts_chunk)
+            for token_type, token_value in split_text_and_break_markers(sanitised_chunk):
+                if token_type == "break":
+                    out.append(f'<break time="{html.escape(token_value, quote=True)}"/>')
+                    continue
+                text_part = token_value.strip()
+                if not text_part:
+                    continue
+                escaped_chunk = html.escape(text_part)
+                out.append(f'<voice {" ".join(attrs)}>{escaped_chunk}</voice>')
         if row.type == "chat_message":
             out.append('<break time="0.20s"/>')
         elif i < len(segments)-1:
@@ -1415,10 +1474,11 @@ def slugify_filename_part(value: str | None) -> str:
     return cleaned or "audiobook"
 
 
-def resolve_output_path(output_arg: str | None, content: str | None, input_path: Path, chapter_title: str | None = None) -> Path:
+def resolve_output_path(output_arg: str | None, content: str | None, input_path: Path, chapter_title: str | None = None, adaptation_prompt_suffix: str | None = None) -> Path:
     name_root = normalise_content_for_filename(content)
     title_slug = slugify_filename_part(chapter_title) if chapter_title else "audiobook"
-    auto_file_name = f"{name_root}_{title_slug}_ssml.xml"
+    suffix = f"_{adaptation_prompt_suffix}" if adaptation_prompt_suffix else ""
+    auto_file_name = f"{name_root}_{title_slug}{suffix}_ssml.xml"
     if not output_arg:
         return Path(auto_file_name)
 
@@ -1546,7 +1606,10 @@ def main() -> int:
             profile_text = profile.profile_id if profile else "-"
             print(f"[{segment.type}] speaker={segment.speaker} profile={profile_text}{conf} text={segment.text!r}")
     output_arg = str(resolve_work_path(args.output, work_directory)) if args.output else None
-    out = resolve_output_path(output_arg, args.content, input_path, title)
+    adaptation_prompt_suffix = None
+    if "--adaptation-prompt-file" in sys.argv:
+        adaptation_prompt_suffix = f"{Path(args.adaptation_prompt_file).stem}_adaptation"
+    out = resolve_output_path(output_arg, args.content, input_path, title, adaptation_prompt_suffix=adaptation_prompt_suffix)
     output_base = out.parent if out.suffix else out
     explicit_adaptation_prompt = "--adaptation-prompt-file" in sys.argv
     if args.adaptation_style in {"immersive", "dramatic"}:
@@ -1602,6 +1665,9 @@ def main() -> int:
         )
     ssml = "<speak>\n" + "\n".join(ssml_lines) + "\n</speak>\n"
     ssml = final_voice_gate(ssml, cfg.voices)
+    for bad in UNSAFE_TEXT_PATTERNS:
+        if bad in ssml:
+            print(f"Warning: unsafe literal detected in SSML output: {bad}", file=sys.stderr)
     print(f"Writing SSML to: {out}")
     ET.fromstring(ssml)
     out.write_text(ssml, encoding="utf-8")
