@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from openai import OpenAI
@@ -31,8 +32,19 @@ MODEL = "gpt-4o-transcribe"
 DIARIZE_MODEL = "gpt-4o-transcribe-diarize"
 DEFAULT_LANGUAGE = "fi"
 ALLOWED_EXTENSIONS = {".mp3"}
+DEFAULT_MAX_FILE_MB = 20.0
+DEFAULT_CHUNK_SECONDS = 600.0
 
 client = OpenAI()  # uses OPENAI_API_KEY from the environment
+
+
+@dataclass
+class ChunkInfo:
+    path: str
+    index: int
+    total: int
+    start_offset: float
+    duration: float
 
 
 def clean_text(s: str) -> str:
@@ -103,12 +115,32 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also write an .srt subtitle file.",
     )
+    parser.add_argument(
+        "--max-file-mb",
+        type=float,
+        default=DEFAULT_MAX_FILE_MB,
+        help=f"Maximum MP3 size before chunking (default: {DEFAULT_MAX_FILE_MB:g} MB).",
+    )
+    parser.add_argument(
+        "--chunk-seconds",
+        type=float,
+        default=DEFAULT_CHUNK_SECONDS,
+        help=f"Chunk duration in seconds when chunking is needed (default: {DEFAULT_CHUNK_SECONDS:g}).",
+    )
     args = parser.parse_args(normalise_legacy_args(sys.argv[1:]))
     args.speaker_map = parse_speaker_mapping(args.speaker)
     return args
 
 
-def validate_args(path: str, start: Optional[float], stop: Optional[float], diarize: bool, model: str) -> None:
+def validate_args(
+    path: str,
+    start: Optional[float],
+    stop: Optional[float],
+    diarize: bool,
+    model: str,
+    max_file_mb: float,
+    chunk_seconds: float,
+) -> None:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
 
@@ -129,6 +161,10 @@ def validate_args(path: str, start: Optional[float], stop: Optional[float], diar
         raise ValueError(
             "--diarize selects the diarization model automatically, so do not combine it with a custom --model."
         )
+    if max_file_mb <= 0:
+        raise ValueError("--max-file-mb must be greater than 0.")
+    if chunk_seconds <= 0:
+        raise ValueError("--chunk-seconds must be greater than 0.")
 
 
 def ffmpeg_available() -> bool:
@@ -175,6 +211,87 @@ def build_trimmed_mp3(source_path: str, start: Optional[float], stop: Optional[f
         raise RuntimeError(f"ffmpeg failed: {result.stderr.strip()}")
 
     return output_path
+
+
+def get_audio_duration_seconds(path: str) -> float:
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed while reading duration: {result.stderr.strip()}")
+    try:
+        return max(0.0, float(result.stdout.strip()))
+    except ValueError as exc:
+        raise RuntimeError("Could not parse duration from ffprobe output.") from exc
+
+
+def split_mp3_to_chunks(source_path: str, chunk_seconds: float, temp_dir: str) -> list[ChunkInfo]:
+    output_pattern = os.path.join(temp_dir, "chunk_%04d.mp3")
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        source_path,
+        "-f",
+        "segment",
+        "-segment_time",
+        str(chunk_seconds),
+        "-c",
+        "copy",
+        output_pattern,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg chunking failed: {result.stderr.strip()}")
+
+    chunk_paths = sorted(
+        os.path.join(temp_dir, name)
+        for name in os.listdir(temp_dir)
+        if name.startswith("chunk_") and name.endswith(".mp3")
+    )
+    if not chunk_paths:
+        raise RuntimeError("ffmpeg did not produce any MP3 chunks.")
+
+    chunk_infos: list[ChunkInfo] = []
+    cumulative_offset = 0.0
+    total = len(chunk_paths)
+    for idx, chunk_path in enumerate(chunk_paths, start=1):
+        duration = get_audio_duration_seconds(chunk_path)
+        chunk_infos.append(
+            ChunkInfo(
+                path=chunk_path,
+                index=idx,
+                total=total,
+                start_offset=cumulative_offset,
+                duration=duration,
+            )
+        )
+        cumulative_offset += duration
+    return chunk_infos
+
+
+def add_offset_to_segments(segments: list[dict[str, Any]], offset_seconds: float) -> list[dict[str, Any]]:
+    adjusted: list[dict[str, Any]] = []
+    for segment in segments:
+        item = dict(segment)
+        try:
+            item["start"] = float(item.get("start", 0.0)) + offset_seconds
+        except (TypeError, ValueError):
+            item["start"] = offset_seconds
+        try:
+            item["end"] = float(item.get("end", 0.0)) + offset_seconds
+        except (TypeError, ValueError):
+            item["end"] = offset_seconds
+        adjusted.append(item)
+    return adjusted
 
 
 def get_output_stem(source_path: str, start: Optional[float], stop: Optional[float]) -> str:
@@ -336,9 +453,14 @@ def build_diarized_text(segments: list[dict[str, Any]], speaker_map: dict[str, s
     return "\n".join(lines).strip()
 
 
-def build_srt(segments: list[dict[str, Any]], speaker_map: dict[str, str], include_speakers: bool) -> str:
+def build_srt(
+    segments: list[dict[str, Any]],
+    speaker_map: dict[str, str],
+    include_speakers: bool,
+    start_index: int = 1,
+) -> str:
     blocks: list[str] = []
-    index = 1
+    index = start_index
 
     for segment in segments:
         text = segment.get("text", "").strip()
@@ -363,20 +485,71 @@ def build_srt(segments: list[dict[str, Any]], speaker_map: dict[str, str], inclu
 def main() -> None:
     try:
         args = parse_args()
-        validate_args(args.file, args.start, args.stop, args.diarize, args.model)
+        validate_args(
+            args.file, args.start, args.stop, args.diarize, args.model, args.max_file_mb, args.chunk_seconds
+        )
 
         actual_model = choose_model(args.diarize, args.model)
         path_to_send = build_trimmed_mp3(args.file, args.start, args.stop)
-        response = transcribe_mp3(
-            path_to_send,
-            actual_model,
-            args.language,
-            args.diarize,
-            args.srt,
+        file_size_bytes = os.path.getsize(path_to_send)
+        file_size_mb = file_size_bytes / (1024 * 1024)
+        size_limit_bytes = int(args.max_file_mb * 1024 * 1024)
+        print(
+            f"Input file size: {file_size_mb:.2f} MB, chunking threshold: {args.max_file_mb:.2f} MB",
+            file=sys.stderr,
         )
 
-        text = extract_text(response)
-        segments = extract_segments(response)
+        texts: list[str] = []
+        segments: list[dict[str, Any]] = []
+        if file_size_bytes <= size_limit_bytes:
+            response = transcribe_mp3(
+                path_to_send,
+                actual_model,
+                args.language,
+                args.diarize,
+                args.srt,
+            )
+            texts.append(extract_text(response))
+            segments = extract_segments(response)
+            print("Transcription completed without chunking.", file=sys.stderr)
+        else:
+            if shutil.which("ffmpeg") is None:
+                raise RuntimeError(
+                    "ffmpeg is required for chunking oversized files. Install ffmpeg and try again."
+                )
+            if shutil.which("ffprobe") is None:
+                raise RuntimeError(
+                    "ffprobe is required for chunk timing during chunked transcription. Install ffmpeg tools."
+                )
+            print("Starting chunking with ffmpeg.", file=sys.stderr)
+            with tempfile.TemporaryDirectory(prefix="litteroi_chunks_") as chunk_dir:
+                chunks = split_mp3_to_chunks(path_to_send, args.chunk_seconds, chunk_dir)
+                print(f"Chunking complete. Created {len(chunks)} chunks.", file=sys.stderr)
+                for chunk in chunks:
+                    print(
+                        (
+                            f"Transcribing chunk {chunk.index}/{chunk.total} "
+                            f"(duration {chunk.duration:.2f}s, start offset {chunk.start_offset:.2f}s)"
+                        ),
+                        file=sys.stderr,
+                    )
+                    try:
+                        response = transcribe_mp3(
+                            chunk.path,
+                            actual_model,
+                            args.language,
+                            args.diarize,
+                            args.srt,
+                        )
+                    except Exception as exc:
+                        raise RuntimeError(
+                            f"Transcription failed for chunk {chunk.index}/{chunk.total}: {chunk.path}"
+                        ) from exc
+                    texts.append(extract_text(response))
+                    segments.extend(add_offset_to_segments(extract_segments(response), chunk.start_offset))
+                    print(f"Chunk {chunk.index}/{chunk.total} transcribed successfully.", file=sys.stderr)
+
+        text = "\n".join(part for part in texts if part.strip()).strip()
         speaker_map = build_default_speaker_map(segments, args.speaker_map)
 
         if args.diarize:
@@ -387,6 +560,7 @@ def main() -> None:
             transcript = build_plain_text(text)
 
         output_txt = get_output_txt_path(args.file, args.start, args.stop)
+        print("Starting transcript merge and write.", file=sys.stderr)
         write_text_file(output_txt, transcript)
         print(transcript)
 
@@ -401,6 +575,7 @@ def main() -> None:
             srt_content = build_srt(segments, speaker_map, include_speakers=args.diarize)
             write_text_file(output_srt, srt_content)
             print(f"Saved subtitles to: {output_srt}", file=sys.stderr)
+        print("Merging complete.", file=sys.stderr)
 
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)
