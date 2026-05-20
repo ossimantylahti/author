@@ -1542,6 +1542,48 @@ def synthesize_one(api_key: str, voice_id: str, text: str, out_path: Path, model
         raise RuntimeError(f"HTTP {e.code}: {details}") from e
 
 
+def build_dialogue_payload_summary(inputs: list[dict[str, str]], model_id: str, output_format: str, language_code: str | None, seed: int | None, apply_text_normalization: str, pronunciation_locators: list[dict[str, str]]) -> dict[str, Any]:
+    unique_voices = {i.get("voice_id", "") for i in inputs if i.get("voice_id")}
+    return {
+        "endpoint": f"{API_BASE}/text-to-dialogue",
+        "model_id": model_id,
+        "language_code": language_code,
+        "output_format": output_format,
+        "apply_text_normalization": apply_text_normalization,
+        "seed": seed,
+        "number_of_inputs": len(inputs),
+        "total_chars": sum(len(i.get("text", "")) for i in inputs),
+        "unique_voice_count": len(unique_voices),
+        "pronunciation_dictionary_locators_count": len(pronunciation_locators or []),
+    }
+
+
+def synthesize_dialogue(api_key: str, inputs: list[dict[str, str]], out_path: Path, model_id: str, pronunciation_locators: list[dict[str, str]], output_format: str, language_code: str | None, seed: int | None, apply_text_normalization: str) -> None:
+    if len(pronunciation_locators or []) > 3:
+        raise RuntimeError("ElevenLabs supports at most 3 pronunciation dictionary locators per request.")
+    url = f"{API_BASE}/text-to-dialogue?output_format={output_format}"
+    headers = {"xi-api-key": api_key, "accept": "audio/mpeg", "content-type": "application/json"}
+    payload: dict[str, Any] = {"inputs": inputs, "model_id": model_id, "apply_text_normalization": apply_text_normalization}
+    if language_code:
+        payload["language_code"] = language_code
+    if pronunciation_locators:
+        payload["pronunciation_dictionary_locators"] = pronunciation_locators
+    if seed is not None:
+        payload["seed"] = seed
+    print(f"ElevenLabs v3 dialogue payload summary: {build_dialogue_payload_summary(inputs, model_id, output_format, language_code, seed, apply_text_normalization, pronunciation_locators)}")
+    req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    try:
+        with request.urlopen(req, timeout=180) as response:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(response.read())
+    except error.HTTPError as e:
+        details = e.read().decode("utf-8", errors="replace")
+        if e.code in {401, 402} and extract_quota_status(details) == "quota_exceeded":
+            raise QuotaExceededError(f"HTTP {e.code}: {details}") from e
+        summary = build_dialogue_payload_summary(inputs, model_id, output_format, language_code, seed, apply_text_normalization, pronunciation_locators)
+        raise RuntimeError(f"HTTP {e.code}: {details}; payload_summary={summary}") from e
+
+
 def render_silence(out_path: Path, seconds: float) -> None:
     cmd = [
         "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
@@ -1659,6 +1701,13 @@ def main() -> int:
     eleven.add_argument("--similarity-boost", type=float, default=0.75, help="ElevenLabs similarity boost.")
     eleven.add_argument("--style", type=float, default=0.15, help="ElevenLabs style value.")
     eleven.add_argument("--no-speaker-boost", action="store_true", help="Disable ElevenLabs speaker boost.")
+    eleven.add_argument("--elevenlabs-v3-mode", choices=["single_voice_dialogue", "polyphonic_dialogue", "tts"], default="single_voice_dialogue", help="Rendering mode for ElevenLabs v3.")
+    eleven.add_argument("--elevenlabs-language-code", default=None, help="Optional language_code for ElevenLabs dialogue requests.")
+    eleven.add_argument("--elevenlabs-seed", type=int, default=None, help="Optional seed for ElevenLabs dialogue requests.")
+    eleven.add_argument("--elevenlabs-apply-text-normalization", choices=["auto", "on", "off"], default="auto", help="Text normalization for ElevenLabs dialogue requests.")
+    eleven.add_argument("--elevenlabs-dialogue-char-limit", type=int, default=2000, help="Maximum character count per dialogue batch.")
+    eleven.add_argument("--elevenlabs-dialogue-max-voices", type=int, default=10, help="Maximum number of unique voices in one dialogue batch.")
+    eleven.add_argument("--elevenlabs-v3-inline-delivery-hints", type=parse_bool_arg, default=True, metavar="BOOL", help="Keep inline [delivery] hints for v3 dialogue.")
     kokoro = parser.add_argument_group("Kokoro options")
     kokoro.add_argument("--kokoro-model", metavar="PATH", default=None, help="Kokoro model path. If omitted, checks CLI argument, environment, current directory and cache.")
     kokoro.add_argument("--kokoro-voices", metavar="PATH", default=None, help="Kokoro voices file path. If omitted, checks CLI argument, environment, current directory and cache.")
@@ -1935,7 +1984,23 @@ def main() -> int:
                 print(f"[{i}] -> {out_path} ({len(before)} merkkiä) speaker={speaker} voice={chunk_voice_id} voice_source={chunk_voice_source} ssml_language={normalise_ssml_language(before_attrs.get('language')) or 'unknown'}")
                 try:
                     if args.renderer == "elevenlabs":
-                        synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
+                        use_dialogue_v3 = model_id == "eleven_v3" and args.elevenlabs_v3_mode != "tts"
+                        if use_dialogue_v3:
+                            dialogue_text = strip_ssml_tags(before).strip()
+                            if dialogue_text:
+                                synthesize_dialogue(
+                                    api_key,
+                                    [{"text": dialogue_text, "voice_id": chunk_voice_id}],
+                                    out_path,
+                                    model_id,
+                                    pronunciation_locators,
+                                    OUTPUT_FORMAT,
+                                    args.elevenlabs_language_code,
+                                    args.elevenlabs_seed,
+                                    args.elevenlabs_apply_text_normalization,
+                                )
+                        else:
+                            synthesize_one(api_key, chunk_voice_id, before, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
                     else:
                         deepgram_model = resolve_deepgram_model(before, speaker, narrators, args.deepgram_model)
                         chunk_voice_id = synthesize_local(args.renderer, chunk_voice_id, before, out_path, args.format, pronunciation_maps, args.kokoro_model, args.kokoro_voices, args.language, Path(args.data_dir).expanduser() / "piper", deepgram_model, api_key)
@@ -1999,8 +2064,30 @@ def main() -> int:
             print("--- /11labs request debug ---")
         try:
             if args.renderer == "elevenlabs":
-                synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
-                part_no += 1
+                use_dialogue_v3 = model_id == "eleven_v3" and args.elevenlabs_v3_mode != "tts"
+                if use_dialogue_v3:
+                    for frag_type, value in split_text_and_breaks(chunk, default_pause_s=args.default_inline_pause_ms / 1000.0):
+                        out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
+                        if frag_type == "break":
+                            render_silence(out_path, float(value))
+                        else:
+                            clean_text = strip_ssml_tags(str(value)).strip()
+                            if clean_text:
+                                synthesize_dialogue(
+                                    api_key,
+                                    [{"text": clean_text, "voice_id": chunk_voice_id}],
+                                    out_path,
+                                    model_id,
+                                    pronunciation_locators,
+                                    OUTPUT_FORMAT,
+                                    args.elevenlabs_language_code,
+                                    args.elevenlabs_seed,
+                                    args.elevenlabs_apply_text_normalization,
+                                )
+                        part_no += 1
+                else:
+                    synthesize_one(api_key, chunk_voice_id, chunk, out_path, model_id, args.stability, args.similarity_boost, args.style, not args.no_speaker_boost, pronunciation_locators, OUTPUT_FORMAT)
+                    part_no += 1
             else:
                 for frag_type, value in split_text_and_breaks(chunk, default_pause_s=args.default_inline_pause_ms / 1000.0):
                     out_path = parts_dir / f"{chapter_prefix}_{part_no:04d}.mp3"
