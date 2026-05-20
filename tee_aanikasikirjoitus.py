@@ -43,7 +43,11 @@ SINGLE_VOICE_MAX_FRAGMENT_LEN = 4095
 INTER_CHUNK_BREAK = "0.4s"
 INTER_LINE_BREAK = "0.8s"
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF\U000024C2-\U0001F251]+", flags=re.UNICODE)
-CHAT_LINE_RE = re.compile(r"^\s*\[([^\]\n]{1,64})\]\s*:\s*(.+?)\s*$")
+CHAT_LINE_RE = re.compile(r"^\s*\[([^\]\n]{1,64})\]\s*(?::\s*|\s+)(.+?)\s*$")
+DELIVERY_HINT_WHITELIST = {
+    "[angry]", "[annoyed]", "[shocked]", "[excited]", "[mocking]", "[softly]", "[whispering]", "[sad]",
+    "[tense]", "[nervous]", "[calmly]", "[dryly]", "[curious]", "[laughing]", "[sighing]",
+}
 
 
 BREAK_MARKER_RE = re.compile(r"\[\[BREAK:([0-9]+(?:\.[0-9]+)?s)\]\]")
@@ -197,6 +201,28 @@ def parse_chat_line(line: str) -> ChatLine | None:
     if not message:
         return None
     return ChatLine(nickname=clean_chat_nickname(m.group(1)), message=message, raw=line)
+
+
+def normalise_chat_line_text(line: str) -> str:
+    parsed = parse_chat_line(line)
+    if not parsed:
+        return line
+    return f"{parsed.nickname}: {parsed.message}"
+
+
+def apply_emotion_hints_rule_based(text: str, enabled: bool = True) -> str:
+    """Apply conservative inline delivery hints for single-voice narration."""
+    if not enabled:
+        return text
+    raw = (text or "").strip()
+    if not raw:
+        return raw
+    if "?" in raw and "!" in raw and not raw.startswith("["):
+        raw = f"[angry] {raw}"
+    lowered = raw.lower()
+    if "ai kitten" in lowered and "[softly]" not in lowered:
+        raw = re.sub(r"(ai kitten[^.?!]*[.?!])", r"[softly] \1", raw, flags=re.IGNORECASE)
+    return raw
 
 
 def normalise_alias_key(value: str) -> str:
@@ -1323,6 +1349,8 @@ def to_ssml_lines(
     segments: list[ScriptSegment],
     cfg: NarratorConfig,
     openai_profile_variant: str | None = None,
+    emotion_detection: str = "rule_based",
+    emotion_hints: bool = True,
 ) -> list[str]:
     out=[]
     default_language = dominant_language_from_segments(segments)
@@ -1362,6 +1390,8 @@ def to_ssml_lines(
 
             emotion, pace, tone = infer_fragment_delivery(chunk, speaker, final_language, is_chat)
             tts_chunk = chunk
+            if emotion_hints and emotion_detection == "rule_based":
+                tts_chunk = apply_emotion_hints_rule_based(tts_chunk, enabled=True)
             if final_language == "finnish" and is_chat:
                 tts_chunk = normalise_finnish_chat_pronunciation(tts_chunk)
             if final_language == "finnish":
@@ -1553,7 +1583,10 @@ def main() -> int:
     paths.add_argument("--narrators-file", metavar="JSON", default="prompt_narrators.txt", help="Narrator/voice configuration JSON. Relative paths are resolved against --code-directory.")
 
     mode = parser.add_argument_group("generation mode")
+    mode.add_argument("--script-mode", choices=["single_voice", "polyphonic"], default="single_voice", help="Script generation mode. single_voice is the MVP default.")
     mode.add_argument("--use-multipolyfony", type=parse_bool_arg, default=False, metavar="BOOL", help="Use speaker-specific/polyphonic SSML. false creates long single-narrator Kertoja fragments and is the normal production mode. Accepted values: true/false, yes/no, 1/0, on/off.")
+    mode.add_argument("--emotion-detection", choices=["off", "rule_based", "llm"], default="rule_based", help="Emotion hint analysis mode.")
+    mode.add_argument("--emotion-hints", type=parse_bool_arg, default=True, metavar="BOOL", help="Enable inline delivery hints such as [angry] and [softly].")
     mode.add_argument("--opening-ambience", default=None, help="Optional ambience cue inserted after the chapter heading, for example cafe_night. Requires --use-ambience true in tee_aanikirja.py to be rendered.")
     mode.add_argument("--opening-ambience-duration", default="5s", help="Duration for --opening-ambience.")
     mode.add_argument("--opening-ambience-volume", default="-24dB", help="Volume for --opening-ambience.")
@@ -1584,6 +1617,8 @@ def main() -> int:
         print(f"Virhe: {e}", file=sys.stderr); return 2
     print(f"Detected chapter title: {title}")
     print(f"Speaker detection mode: {args.speaker_detection}")
+    if args.script_mode == "polyphonic":
+        args.use_multipolyfony = True
     print(f"Use multipolyfony: {args.use_multipolyfony}")
     if args.use_multipolyfony:
         if args.speaker_detection == "openai":
@@ -1655,7 +1690,13 @@ def main() -> int:
     debug_rows: list[dict[str, object]] = []
     if args.adaptation_style != "none":
         segments, debug_rows = apply_audio_adaptation(segments, args.adaptation_style, main_language, args, chapter_label=args.content)
-    ssml_lines = to_ssml_lines(segments, cfg, openai_profile_variant=args.openai_profile_variant)
+    ssml_lines = to_ssml_lines(
+        segments,
+        cfg,
+        openai_profile_variant=args.openai_profile_variant,
+        emotion_detection=args.emotion_detection,
+        emotion_hints=args.emotion_hints,
+    )
     if args.opening_ambience:
         ssml_lines = insert_opening_ambience_after_first_voice(
             ssml_lines,
