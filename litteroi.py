@@ -379,7 +379,7 @@ def merge_adjacent_segments(segments: list[dict[str, Any]]) -> list[dict[str, An
     """Merge adjacent diarized segments from the same speaker for cleaner output."""
     merged: list[dict[str, Any]] = []
 
-    for segment in merge_adjacent_segments(segments):
+    for segment in segments:
         text = segment.get("text", "").strip()
         if not text:
             continue
