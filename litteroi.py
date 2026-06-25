@@ -33,7 +33,7 @@ DIARIZE_MODEL = "gpt-4o-transcribe-diarize"
 DEFAULT_LANGUAGE = "fi"
 ALLOWED_EXTENSIONS = {".mp3"}
 DEFAULT_MAX_FILE_MB = 20.0
-DEFAULT_CHUNK_SECONDS = 600.0
+DEFAULT_CHUNK_SECONDS = 900.0
 
 client = OpenAI()  # uses OPENAI_API_KEY from the environment
 
@@ -499,9 +499,28 @@ def main() -> None:
             file=sys.stderr,
         )
 
+        if shutil.which("ffprobe") is None:
+            raise RuntimeError(
+                "ffprobe is required for reading audio duration. Install ffmpeg tools and try again."
+            )
+
+        audio_duration_seconds = get_audio_duration_seconds(path_to_send)
+        should_chunk = (
+            file_size_bytes > size_limit_bytes
+            or audio_duration_seconds > args.chunk_seconds
+        )
+
+        print(
+            (
+                f"Input duration: {audio_duration_seconds:.2f}s, "
+                f"chunk duration threshold: {args.chunk_seconds:.2f}s"
+            ),
+            file=sys.stderr,
+        )
+
         texts: list[str] = []
         segments: list[dict[str, Any]] = []
-        if file_size_bytes <= size_limit_bytes:
+        if not should_chunk:
             response = transcribe_mp3(
                 path_to_send,
                 actual_model,
@@ -515,11 +534,7 @@ def main() -> None:
         else:
             if shutil.which("ffmpeg") is None:
                 raise RuntimeError(
-                    "ffmpeg is required for chunking oversized files. Install ffmpeg and try again."
-                )
-            if shutil.which("ffprobe") is None:
-                raise RuntimeError(
-                    "ffprobe is required for chunk timing during chunked transcription. Install ffmpeg tools."
+                    "ffmpeg is required for chunking files. Install ffmpeg and try again."
                 )
             print("Starting chunking with ffmpeg.", file=sys.stderr)
             with tempfile.TemporaryDirectory(prefix="litteroi_chunks_") as chunk_dir:
