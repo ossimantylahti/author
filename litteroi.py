@@ -101,14 +101,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--diarize",
+        dest="diarize",
         action="store_true",
-        help="Use the diarization model and label speakers in the output.",
+        default=True,
+        help="Use the diarization model and label speakers in the output. This is enabled by default.",
+    )
+    parser.add_argument(
+        "--no-diarize",
+        dest="diarize",
+        action="store_false",
+        help="Disable speaker diarization and use plain transcription.",
     )
     parser.add_argument(
         "--speaker",
         action="append",
         default=[],
         help="Rename diarized speakers, e.g. --speaker A=GUEST --speaker B=HOST",
+    )
+    parser.add_argument(
+        "--speaker-count",
+        type=int,
+        default=2,
+        help="Expected number of speakers for diarization normalisation (default: 2, suitable for phone calls).",
     )
     parser.add_argument(
         "--srt",
@@ -294,6 +308,82 @@ def add_offset_to_segments(segments: list[dict[str, Any]], offset_seconds: float
     return adjusted
 
 
+def normalise_chunk_speakers(
+    segments: list[dict[str, Any]],
+    speaker_count: int,
+    chunk_index: int,
+) -> list[dict[str, Any]]:
+    """Map per-chunk diarization speaker labels to stable call-level labels.
+
+    The OpenAI diarization response may restart speaker labels for each chunk.
+    For phone calls, the usual case is two speakers, so this function normalises
+    the first distinct local speaker in a chunk to A, the second to B, and so on.
+
+    This is intentionally conservative: it does not claim to recognise voices
+    acoustically across chunks. It makes long, chunked phone-call output more
+    readable and predictable, while preserving the original local label.
+    """
+    if speaker_count <= 0:
+        raise ValueError("--speaker-count must be greater than 0.")
+
+    labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    local_to_global: dict[str, str] = {}
+    next_index = 0
+    normalised: list[dict[str, Any]] = []
+
+    for segment in segments:
+        item = dict(segment)
+        raw_speaker = item.get("speaker")
+        local_label = str(raw_speaker).strip() if raw_speaker is not None else ""
+
+        if not local_label:
+            local_label = "UNKNOWN"
+
+        if local_label not in local_to_global:
+            if next_index < len(labels):
+                global_label = labels[next_index]
+            else:
+                global_label = f"Speaker {next_index + 1}"
+            local_to_global[local_label] = global_label
+            next_index += 1
+
+        item["original_speaker"] = local_label
+        item["speaker"] = local_to_global[local_label]
+        item["chunk_index"] = chunk_index
+
+        if next_index > speaker_count:
+            item["speaker_warning"] = (
+                f"More than {speaker_count} speakers detected in chunk {chunk_index}."
+            )
+
+        normalised.append(item)
+
+    return normalised
+
+
+def merge_adjacent_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge adjacent diarized segments from the same speaker for cleaner output."""
+    merged: list[dict[str, Any]] = []
+
+    for segment in merge_adjacent_segments(segments):
+        text = segment.get("text", "").strip()
+        if not text:
+            continue
+
+        speaker = segment.get("speaker")
+        current = dict(segment)
+
+        if merged and merged[-1].get("speaker") == speaker:
+            previous_text = merged[-1].get("text", "").strip()
+            merged[-1]["text"] = f"{previous_text} {text}".strip()
+            merged[-1]["end"] = current.get("end", merged[-1].get("end"))
+            continue
+
+        merged.append(current)
+
+    return merged
+
+
 def get_output_stem(source_path: str, start: Optional[float], stop: Optional[float]) -> str:
     base, _ = os.path.splitext(source_path)
     if start is None and stop is None:
@@ -444,7 +534,7 @@ def build_plain_text(text: str) -> str:
 
 def build_diarized_text(segments: list[dict[str, Any]], speaker_map: dict[str, str]) -> str:
     lines: list[str] = []
-    for segment in segments:
+    for segment in merge_adjacent_segments(segments):
         text = segment.get("text", "").strip()
         if not text:
             continue
@@ -485,6 +575,8 @@ def build_srt(
 def main() -> None:
     try:
         args = parse_args()
+        if args.speaker_count <= 0:
+            raise ValueError("--speaker-count must be greater than 0.")
         validate_args(
             args.file, args.start, args.stop, args.diarize, args.model, args.max_file_mb, args.chunk_seconds
         )
@@ -530,6 +622,12 @@ def main() -> None:
             )
             texts.append(extract_text(response))
             segments = extract_segments(response)
+            if args.diarize:
+                segments = normalise_chunk_speakers(
+                    segments,
+                    args.speaker_count,
+                    1,
+                )
             print("Transcription completed without chunking.", file=sys.stderr)
         else:
             if shutil.which("ffmpeg") is None:
@@ -561,7 +659,14 @@ def main() -> None:
                             f"Transcription failed for chunk {chunk.index}/{chunk.total}: {chunk.path}"
                         ) from exc
                     texts.append(extract_text(response))
-                    segments.extend(add_offset_to_segments(extract_segments(response), chunk.start_offset))
+                    chunk_segments = extract_segments(response)
+                    if args.diarize:
+                        chunk_segments = normalise_chunk_speakers(
+                            chunk_segments,
+                            args.speaker_count,
+                            chunk.index,
+                        )
+                    segments.extend(add_offset_to_segments(chunk_segments, chunk.start_offset))
                     print(f"Chunk {chunk.index}/{chunk.total} transcribed successfully.", file=sys.stderr)
 
         text = "\n".join(part for part in texts if part.strip()).strip()
