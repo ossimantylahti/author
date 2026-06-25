@@ -34,6 +34,8 @@ DEFAULT_LANGUAGE = "fi"
 ALLOWED_EXTENSIONS = {".mp3"}
 DEFAULT_MAX_FILE_MB = 20.0
 DEFAULT_CHUNK_SECONDS = 900.0
+DEFAULT_SPEAKER_COUNT = 2
+DEFAULT_CONTEXT_CHARS = 1200
 
 client = OpenAI()  # uses OPENAI_API_KEY from the environment
 
@@ -121,8 +123,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--speaker-count",
         type=int,
-        default=2,
-        help="Expected number of speakers for diarization normalisation (default: 2, suitable for phone calls).",
+        default=DEFAULT_SPEAKER_COUNT,
+        help=(
+            "Expected number of speakers for diarization normalisation "
+            f"(default: {DEFAULT_SPEAKER_COUNT}, suitable for phone calls)."
+        ),
+    )
+    parser.add_argument(
+        "--context-chars",
+        type=int,
+        default=DEFAULT_CONTEXT_CHARS,
+        help=(
+            "Number of previous transcript characters sent as context for later chunks "
+            f"(default: {DEFAULT_CONTEXT_CHARS})."
+        ),
     )
     parser.add_argument(
         "--srt",
@@ -461,9 +475,19 @@ def choose_model(diarize: bool, requested_model: str) -> str:
     return DIARIZE_MODEL if diarize else requested_model
 
 
-def transcribe_mp3(path: str, model: str, language: str, diarize: bool, want_srt: bool) -> Any:
+def transcribe_mp3(
+    path: str,
+    model: str,
+    language: str,
+    diarize: bool,
+    want_srt: bool,
+    prompt: Optional[str] = None,
+) -> Any:
     response_format = "text"
     request_kwargs: dict[str, Any] = {}
+
+    if prompt:
+        request_kwargs["prompt"] = prompt
 
     if diarize:
         response_format = "diarized_json"
@@ -532,6 +556,46 @@ def build_plain_text(text: str) -> str:
     return text.strip()
 
 
+def build_chunk_context_prompt(
+    previous_segments: list[dict[str, Any]],
+    speaker_map: dict[str, str],
+    context_chars: int,
+) -> Optional[str]:
+    """Build a compact speaker/context hint for a later chunk.
+
+    This does not provide biometric speaker recognition. It gives the
+    transcription model recent textual continuity and expected speaker labels,
+    which is often useful for two-person phone calls split into chunks.
+    """
+    if context_chars <= 0 or not previous_segments:
+        return None
+
+    recent_lines: list[str] = []
+    for segment in merge_adjacent_segments(previous_segments[-12:]):
+        text = segment.get("text", "").strip()
+        if not text:
+            continue
+        speaker = remap_speaker(segment.get("speaker"), speaker_map)
+        recent_lines.append(f"{speaker}: {text}")
+
+    recent_text = "\n".join(recent_lines).strip()
+    if not recent_text:
+        return None
+
+    if len(recent_text) > context_chars:
+        recent_text = recent_text[-context_chars:]
+
+    known_speakers = ", ".join(sorted(set(speaker_map.values()))) or "A, B"
+
+    return (
+        "This is a Finnish phone-call recording split into chunks. "
+        "There are normally two speakers. Keep speaker labels consistent with "
+        f"the previous context when possible. Known speaker labels: {known_speakers}. "
+        "Recent previous transcript context:\n"
+        f"{recent_text}"
+    )
+
+
 def build_diarized_text(segments: list[dict[str, Any]], speaker_map: dict[str, str]) -> str:
     lines: list[str] = []
     for segment in merge_adjacent_segments(segments):
@@ -577,6 +641,8 @@ def main() -> None:
         args = parse_args()
         if args.speaker_count <= 0:
             raise ValueError("--speaker-count must be greater than 0.")
+        if args.context_chars < 0:
+            raise ValueError("--context-chars must be 0 or greater.")
         validate_args(
             args.file, args.start, args.stop, args.diarize, args.model, args.max_file_mb, args.chunk_seconds
         )
@@ -612,6 +678,11 @@ def main() -> None:
 
         texts: list[str] = []
         segments: list[dict[str, Any]] = []
+        speaker_map = {
+            chr(ord("A") + i): f"Speaker {i + 1}"
+            for i in range(min(args.speaker_count, 26))
+        }
+        speaker_map.update(args.speaker_map)
         if not should_chunk:
             response = transcribe_mp3(
                 path_to_send,
@@ -619,6 +690,7 @@ def main() -> None:
                 args.language,
                 args.diarize,
                 args.srt,
+                prompt=None,
             )
             texts.append(extract_text(response))
             segments = extract_segments(response)
@@ -647,12 +719,21 @@ def main() -> None:
                         file=sys.stderr,
                     )
                     try:
+                        context_prompt = None
+                        if args.diarize and chunk.index > 1:
+                            context_prompt = build_chunk_context_prompt(
+                                segments,
+                                speaker_map,
+                                args.context_chars,
+                            )
+
                         response = transcribe_mp3(
                             chunk.path,
                             actual_model,
                             args.language,
                             args.diarize,
                             args.srt,
+                            prompt=context_prompt,
                         )
                     except Exception as exc:
                         raise RuntimeError(
@@ -670,7 +751,7 @@ def main() -> None:
                     print(f"Chunk {chunk.index}/{chunk.total} transcribed successfully.", file=sys.stderr)
 
         text = "\n".join(part for part in texts if part.strip()).strip()
-        speaker_map = build_default_speaker_map(segments, args.speaker_map)
+        speaker_map = build_default_speaker_map(segments, speaker_map)
 
         if args.diarize:
             transcript = build_diarized_text(segments, speaker_map)
