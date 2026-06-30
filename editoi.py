@@ -32,13 +32,10 @@ CONTINUE_THRESHOLD_TOKENS = 50
 # Hard limit for how many files can be sent at once.
 MAX_INPUT_FILES = 10
 
-# A strongly worded continuation prompt to reduce repetition/drift.
-FOLLOWUP_PROMPT = (
-    "Jatka täsmälleen siitä, mihin jäit.\n"
-    "Älä toista aiempaa tekstiä tai otsikoita, jotka ovat jo näkyneet.\n"
-    "Jatka samalla otsikkorakenteella ja samalla sävyllä.\n"
-    "Aloita keskeneräisestä lauseesta/kappaleesta ja jatka eteenpäin.\n"
-)
+# A small visible tail is included in follow-up prompts so the model can continue
+# from the actual printed output without needing a very long continuation prompt.
+FOLLOWUP_TAIL_CHARS = 256
+
 
 def clean_text(s: str) -> str:
     # Removes illegal surrogates and forces UTF-8 compatibility
@@ -54,16 +51,59 @@ def _require_active_model() -> str:
     return ACTIVE_MODEL
 
 
+def _style_name_and_id(paragraph) -> Tuple[str, str]:
+    """Return a paragraph's style name and style id, defensively."""
+    style = getattr(paragraph, "style", None)
+    if not style:
+        return "", ""
+    return (getattr(style, "name", "") or "", getattr(style, "style_id", "") or "")
+
+
+def _heading_level(paragraph) -> Optional[int]:
+    """Detect Word Heading 1 / Heading 2 styles, including localized Finnish names."""
+    style_name, style_id = _style_name_and_id(paragraph)
+    normalized = f"{style_name} {style_id}".strip().lower().replace("_", " ").replace("-", " ")
+
+    heading_1_markers = ("heading 1", "heading1", "otsikko 1", "otsikko1")
+    heading_2_markers = ("heading 2", "heading2", "otsikko 2", "otsikko2")
+
+    if any(marker in normalized for marker in heading_1_markers):
+        return 1
+    if any(marker in normalized for marker in heading_2_markers):
+        return 2
+    return None
+
+
 def load_docx_as_text(path: str) -> str:
-    """Load a .docx file as a single plain-text string (paragraphs separated by blank lines)."""
+    """
+    Load a .docx file as plain text while preserving Heading 1 / Heading 2.
+
+    Heading markers are made explicit because the OpenAI API receives only text,
+    not Word paragraph styles. The markers are intentionally easy to prompt
+    against, e.g. CHAPTER_HEADING_2.
+    """
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
 
     doc = Document(path)
-    paragraphs = []
+    paragraphs: List[str] = []
+    heading_1_count = 0
+    heading_2_count = 0
+
     for p in doc.paragraphs:
         text = p.text.strip()
-        if text:
+        if not text:
+            continue
+
+        level = _heading_level(p)
+
+        if level == 1:
+            heading_1_count += 1
+            paragraphs.append(f"[HEADING_1 #{heading_1_count}: {text}]")
+        elif level == 2:
+            heading_2_count += 1
+            paragraphs.append(f"[CHAPTER_HEADING_2 #{heading_2_count}: {text}]")
+        else:
             paragraphs.append(text)
 
     return "\n\n".join(paragraphs)
@@ -124,33 +164,39 @@ def _call_initial(book_text: str, question: str):
 #        "Aloita palautteesi 10–20 rivin yhteenvedolla ja tärkeimmillä huomioillasi."
 #    )
     instructions = (
-    "Luet käsikirjoitusta kokeneen kaunokirjallisuuden kustannustoimittajan näkökulmasta. "
-    "Analysoit vain ja ainoastaan sinulle annettua materiaalia. "
-    "Palautteesi on analyyttistä, harkittua ja kirjoittajaa kunnioittavaa. "
-    "Älä tee oletuksia sisällöstä, jota ei ole eksplisiittisesti läsnä tiedostoissa.\n\n"
+        "Luet käsikirjoitusta kokeneen kaunokirjallisuuden kustannustoimittajan näkökulmasta. "
+        "Analysoit vain ja ainoastaan sinulle annettua materiaalia. "
+        "Palautteesi on analyyttistä, harkittua ja kirjoittajaa kunnioittavaa. "
+        "Älä tee oletuksia sisällöstä, jota ei ole eksplisiittisesti läsnä tiedostoissa.\n\n"
 
-    "Kun esität tekstistä johdettavia väitteitä (rakenteellisia, temaattisia, psykologisia, dramaturgisia), "
-    "ankkuroi jokainen merkittävä väite konkreettiseen kohtaan tekstissä. "
-    "Viittaa aina vähintään yhteen seuraavista:\n"
-    "- luvun tai jakson otsikko sellaisena kuin se esiintyy tiedostossa\n"
-    "- selkeä tunnistettava kohtaus tai tapahtuma\n"
-    "- suora tai osittainen sitaatti (lyhyt)\n\n"
-    "Muokkaus- ja kehitysehdotukset saat esittää ilman sitaattia, mutta jos perustat ehdotuksen "
-    "diagnostiikkaan (mikä toimii / mikä ei), se pitää ankkuroida.\n\n"
+        "Word-tiedostoista Heading 1 ja Heading 2 -tyylit on muunnettu tekstissä eksplisiittisiksi merkeiksi. "
+        "Heading 1 näkyy muodossa [HEADING_1 #N: otsikko]. "
+        "Heading 2 näkyy muodossa [CHAPTER_HEADING_2 #N: otsikko]. "
+        "Jos käyttäjä pyytää lukuja, lukukohtaista analyysiä tai chapter-listausta, käytä ensisijaisesti "
+        "CHAPTER_HEADING_2-merkintöjä varsinaisten lukujen tunnistamiseen, ellei käyttäjä toisin määrää.\n\n"
 
-    "Jos et löydä aineistosta suoraa tukea väitteellesi, sano tämä eksplisiittisesti "
-    "('Tätä ei voi varmistaa annetusta materiaalista'). "
-    "Älä täytä aukkoja yleisillä kustannustoimittajakliseillä.\n\n"
+        "Kun esität tekstistä johdettavia väitteitä (rakenteellisia, temaattisia, psykologisia, dramaturgisia), "
+        "ankkuroi jokainen merkittävä väite konkreettiseen kohtaan tekstissä. "
+        "Viittaa vähintään yhteen seuraavista: luvun tai jakson otsikko, selkeä tunnistettava kohtaus "
+        "tai lyhyt suora/osittainen sitaatti.\n\n"
 
-    "Jos käyttäjä pyytää numeerista laskentaa (esim. merkit, liuskat, lukumäärät), "
-    "tee laskenta suoraan annetusta tekstistä ja raportoi tulos. "
-    "Kerro lyhyesti laskentatapa (rajaukset, lasketaanko otsikot mukaan, lasketaanko rivinvaihdot merkkeinä). "
-    "Tätä ei käsitellä kustannustoimittaja-väitteenä eikä se vaadi sitaattiankkurointia.\n\n"
+        "Muokkaus- ja kehitysehdotukset saat esittää ilman sitaattia, mutta jos perustat ehdotuksen "
+        "diagnostiikkaan (mikä toimii / mikä ei), se pitää ankkuroida. "
+        "Jos et löydä aineistosta suoraa tukea väitteellesi, sano tämä eksplisiittisesti "
+        "('Tätä ei voi varmistaa annetusta materiaalista'). "
+        "Älä täytä aukkoja yleisillä kustannustoimittajakliseillä.\n\n"
 
-    "Aloita vastauksesi 1–20 rivin yhteenvedolla, jonka jokainen keskeinen väite on jäljitettävissä aineistoon. "
-    "Jos vastaus on puhtaasti numeerinen, aloita taulukolla ja lisää 1–3 rivin selite. "
-    "Tämän jälkeen voit edetä jäsenneltyyn analyysiin, jos sellaiselle on tarvetta vastauksessa. "
-    "Pyydä täsmennystä vain, jos sitä ilman et voi vastata."
+        "Jos käyttäjä pyytää numeerista laskentaa (esim. merkit, liuskat, lukumäärät), "
+        "tee laskenta suoraan annetusta tekstistä ja raportoi tulos. "
+        "Kerro lyhyesti laskentatapa, jos se sopii pyydettyyn vastausformaattiin.\n\n"
+
+        "Noudata käyttäjän pyytämää vastausformaattia täsmällisesti. "
+        "Jos käyttäjä pyytää CSV:tä, taulukkoa, JSONia, listaa tai muuta tiukkaa formaattia, palauta vain se formaatti "
+        "ilman johdantoa, yhteenvetoa tai jälkisanoja. "
+        "Tee alun yhteenveto vain silloin, kun se selvästi sopii käyttäjän kysymykseen ja vastausmuotoon, "
+        "esimerkiksi avoimessa laadullisessa arviopyynnössä. "
+        "Älä tee yhteenvetoa, jos käyttäjä kieltää sen tai pyytää pelkkää määrämuotoista tulosta. "
+        "Pyydä täsmennystä vain, jos sitä ilman et voi vastata."
     )
    
 
@@ -222,6 +268,21 @@ def _should_continue(out_tokens: Optional[int], followups_used_now: int) -> bool
     return out_tokens >= threshold
 
 
+def _make_followup_prompt(accumulated: List[str]) -> str:
+    """Create a continuation prompt with a short tail of already printed output."""
+    current_output = "\n".join(accumulated)
+    tail = current_output[-FOLLOWUP_TAIL_CHARS:] if current_output else ""
+
+    return (
+        "Jatka vastausta täsmälleen siitä, mihin se jäi.\n"
+        "Älä aloita alusta. Älä toista jo annettua tekstiä, otsikoita tai CSV-rivejä.\n"
+        "Jos viimeinen näkyvä rivi tai lause on kesken, jatka sitä suoraan.\n"
+        "Säilytä täsmälleen sama vastausformaatti kuin aiemmin.\n\n"
+        "VIIMEISET NÄKYVÄT MERKIT AIEMMASTA VASTAUKSESTA:\n"
+        f"{tail}"
+    )
+
+
 def ask_question(
     book_text: str,
     question: str,
@@ -242,9 +303,10 @@ def ask_question(
 
     while _should_continue(output_tokens, followups_used):
         followups_used += 1
+        followup_prompt = _make_followup_prompt(accumulated)
         text, response_id, output_tokens = _call_followup(
             last_response_id,
-            FOLLOWUP_PROMPT,
+            followup_prompt,
             index=followups_used,
         )
         accumulated.append(text)
