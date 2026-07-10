@@ -163,6 +163,43 @@ def _safe_get_output_tokens(response) -> Optional[int]:
     return getattr(usage, "output_tokens", None)
 
 
+def _safe_get_reasoning_tokens(response) -> Optional[int]:
+    """Safely extract hidden reasoning-token count, when reported."""
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return None
+
+    details = getattr(usage, "output_tokens_details", None)
+    if not details:
+        return None
+
+    return getattr(details, "reasoning_tokens", None)
+
+
+def _incomplete_reason(response) -> Optional[str]:
+    """Return the API's reason for an incomplete response, when available."""
+    details = getattr(response, "incomplete_details", None)
+    if not details:
+        return None
+
+    return getattr(details, "reason", None)
+
+
+def _debug_response(label: str, response) -> None:
+    """Print useful response diagnostics without dumping the full response."""
+    text = response.output_text or ""
+
+    print(
+        f"[DEBUG] {label}: "
+        f"status={getattr(response, 'status', None)}, "
+        f"incomplete_reason={_incomplete_reason(response)}, "
+        f"output_tokens={_safe_get_output_tokens(response)}, "
+        f"reasoning_tokens={_safe_get_reasoning_tokens(response)}, "
+        f"visible_chars={len(text)}",
+        flush=True,
+    )
+
+
 def _call_initial(book_text: str, question: str):
     """Initial API call: send the full manuscript (possibly multiple files) + the question."""
 #    instructions = (
@@ -233,12 +270,8 @@ def _call_initial(book_text: str, question: str):
     )
     print("[DEBUG] INITIAL request finished.", flush=True)
 
-    text = response.output_text
-    response_id = response.id
-    output_tokens = _safe_get_output_tokens(response)
-
-    print(f"[DEBUG] INITIAL: output_tokens={output_tokens}", flush=True)
-    return text, response_id, output_tokens
+    _debug_response("INITIAL", response)
+    return response
 
 
 def _call_followup(previous_response_id: str, content: str, index: int):
@@ -258,38 +291,73 @@ def _call_followup(previous_response_id: str, content: str, index: int):
     )
     print(f"[DEBUG] FOLLOWUP #{index} finished.", flush=True)
 
-    text = response.output_text
-    response_id = response.id
-    output_tokens = _safe_get_output_tokens(response)
-
-    print(f"[DEBUG] FOLLOWUP #{index}: output_tokens={output_tokens}", flush=True)
-    return text, response_id, output_tokens
+    _debug_response(f"FOLLOWUP #{index}", response)
+    return response
 
 
-def _should_continue(out_tokens: Optional[int], followups_used_now: int) -> bool:
-    """Decide whether to request another continuation."""
+def _should_continue(response, followups_used_now: int) -> bool:
+    """
+    Continue when the API explicitly reports an incomplete response.
+
+    A token-count heuristic is retained only as a defensive fallback for cases
+    where the API does not provide a useful incomplete status.
+    """
     if followups_used_now >= MAX_AUTO_FOLLOWUPS:
         return False
 
-    if out_tokens is None:
-        return False
+    status = getattr(response, "status", None)
+    incomplete_reason = _incomplete_reason(response)
 
+    if status == "incomplete":
+        # Automatic continuation is appropriate only when the output budget
+        # was exhausted. Do not loop on content filters or other failures.
+        return incomplete_reason in (None, "max_output_tokens")
+
+    if incomplete_reason is not None:
+        return incomplete_reason == "max_output_tokens"
+
+    output_tokens = _safe_get_output_tokens(response)
+    visible_text = response.output_text or ""
     threshold = MAX_OUTPUT_TOKENS - CONTINUE_THRESHOLD_TOKENS
-    return out_tokens >= threshold
+
+    return (
+        bool(visible_text.strip())
+        and output_tokens is not None
+        and output_tokens >= threshold
+    )
 
 
 def _make_followup_prompt(accumulated: List[str]) -> str:
-    """Create a continuation prompt with a short tail of already printed output."""
-    current_output = "\n".join(accumulated)
-    tail = current_output[-FOLLOWUP_TAIL_CHARS:] if current_output else ""
+    """
+    Create a continuation prompt appropriate to the visible output.
+
+    If no visible output exists yet, ask the model to proceed to the answer.
+    Otherwise provide a short seam marker from the printed response.
+    """
+    visible_parts = [part for part in accumulated if part and part.strip()]
+    current_output = "\n".join(visible_parts)
+
+    if not current_output:
+        return (
+            "Jatka tehtävän suorittamista käyttäen edellisen vastauksen "
+            "säilytettyä päättelykontekstia. Aloita nyt varsinainen näkyvä vastaus. "
+            "Älä kommentoi tokenrajaa, päättelyä, jatkokutsua tai sitä, ettei "
+            "edellisessä vastauksessa ollut näkyvää tekstiä. "
+            "Noudata alkuperäisen käyttäjäpyynnön formaattia täsmällisesti."
+        )
+
+    tail = current_output[-FOLLOWUP_TAIL_CHARS:]
 
     return (
-        "Jatka vastausta täsmälleen siitä, mihin se jäi.\n"
-        "Älä aloita alusta. Älä toista jo annettua tekstiä, otsikoita tai CSV-rivejä.\n"
-        "Jos viimeinen näkyvä rivi tai lause on kesken, jatka sitä suoraan.\n"
-        "Säilytä täsmälleen sama vastausformaatti kuin aiemmin.\n\n"
-        "VIIMEISET NÄKYVÄT MERKIT AIEMMASTA VASTAUKSESTA:\n"
-        f"{tail}"
+        "Jatka edellistä vastaustasi suoraan siitä kohdasta, johon se jäi.\n"
+        "Älä kommentoi jatkamista, tokenrajaa tai teknistä kontekstia.\n"
+        "Älä aloita alusta äläkä toista jo annettua tekstiä tai otsikoita.\n"
+        "Jos viimeinen lause jäi kesken, jatka sitä suoraan.\n"
+        "Säilytä täsmälleen sama vastausformaatti.\n\n"
+        "Tulostetun vastauksen loppu saumakohdan tunnistamista varten:\n"
+        "---\n"
+        f"{tail}\n"
+        "---"
     )
 
 
@@ -298,32 +366,59 @@ def ask_question(
     question: str,
     previous_response_id: Optional[str] = None,
 ) -> Tuple[str, str]:
-    """Ask the model and automatically continue if the response is likely truncated."""
-    accumulated = []
+    """Ask the model and automatically continue incomplete responses."""
+    accumulated: List[str] = []
     followups_used = 0
 
     if previous_response_id is None:
-        text, response_id, output_tokens = _call_initial(book_text, question)
+        response = _call_initial(book_text, question)
     else:
-        # Session continues: send only the new question.
-        text, response_id, output_tokens = _call_followup(previous_response_id, question, index=0)
+        # A new user question inside the existing session.
+        response = _call_followup(
+            previous_response_id,
+            question,
+            index=0,
+        )
 
-    accumulated.append(text)
-    last_response_id = response_id
+    text = response.output_text or ""
+    if text:
+        accumulated.append(text)
 
-    while _should_continue(output_tokens, followups_used):
+    last_response_id = response.id
+
+    while _should_continue(response, followups_used):
         followups_used += 1
         followup_prompt = _make_followup_prompt(accumulated)
-        text, response_id, output_tokens = _call_followup(
+
+        response = _call_followup(
             last_response_id,
             followup_prompt,
             index=followups_used,
         )
-        accumulated.append(text)
-        last_response_id = response_id
+
+        text = response.output_text or ""
+        if text:
+            accumulated.append(text)
+
+        last_response_id = response.id
 
     full_answer = "\n".join(accumulated)
-    print(f"[DEBUG] Done. followups_used={followups_used}.", flush=True)
+
+    if not full_answer.strip():
+        status = getattr(response, "status", None)
+        reason = _incomplete_reason(response)
+
+        raise RuntimeError(
+            "Model returned no visible response after automatic continuations. "
+            f"Last status={status!r}, incomplete_reason={reason!r}, "
+            f"followups_used={followups_used}."
+        )
+
+    print(
+        f"[DEBUG] Done. followups_used={followups_used}.",
+        flush=True,
+    )
+
     return full_answer, last_response_id
 
 
