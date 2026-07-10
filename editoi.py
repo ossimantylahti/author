@@ -7,12 +7,22 @@ from docx import Document
 from openai import OpenAI
 from openai import NotFoundError
 
-# You can swap model here.
-# GPT 5.4 published on 6.3.2026.
-# GPT 5.5 published on 23.4.2026
-MODEL = "gpt-5.5"
+# You can swap the preferred model here.
+# GPT-5.6 uses a three-tier naming scheme:
+#   gpt-5.6       -> alias for gpt-5.6-sol (highest capability)
+#   gpt-5.6-terra -> balanced capability and cost
+#   gpt-5.6-luna  -> lowest-cost, high-volume option
+# For manuscript analysis, Sol is the default. Change MODEL to
+# "gpt-5.6-terra" if you prefer the balanced-price tier.
+MODEL = "gpt-5.6"
+
 # Ordered fallback models (MODEL is the primary preferred option).
+# If Sol is not enabled for the API project, the script tries Terra and Luna
+# before falling back to earlier model generations.
 MODEL_FALLBACKS = [
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
     "gpt-5.4",
     "gpt-5.2",
     "gpt-4",
