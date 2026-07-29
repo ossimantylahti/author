@@ -517,11 +517,11 @@ def ask_question(
 
 
 def _usage_exit() -> None:
-    print("Usage: python3 editoi_cached.py FILE1 [FILE2 ... FILE10]")
+    print("Usage: python3 editoi.py FILE1 [FILE2 ... FILE10]")
     print("Examples:")
-    print("  python3 editoi_cached.py manuscript.docx")
-    print("  python3 editoi_cached.py mts.txt staccato.json")
-    print("  python3 editoi_cached.py Edit2.docx staccato.csv notes.txt")
+    print("  python3 editoi.py manuscript.docx")
+    print("  python3 editoi.py mts.txt staccato.json")
+    print("  python3 editoi.py Edit2.docx staccato.csv notes.txt")
     sys.exit(1)
 
 
