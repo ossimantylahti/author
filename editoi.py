@@ -1,11 +1,125 @@
 #!/usr/bin/env python3
 import hashlib
+import importlib
+import importlib.metadata
+import inspect
 import os
+import shlex
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
-from docx import Document
-from openai import NotFoundError, OpenAI
+
+REQUIRED_PACKAGES = (
+    ("openai", "openai"),
+    ("python-docx", "docx"),
+)
+
+
+def _pip_install_command() -> str:
+    """Return an install command that targets this exact Python environment."""
+    packages = " ".join(distribution for distribution, _ in REQUIRED_PACKAGES)
+    python_executable = shlex.quote(sys.executable)
+    return f"{python_executable} -m pip install --upgrade {packages}"
+
+
+def _distribution_version(distribution_name: str) -> str:
+    """Return an installed distribution version without importing the package."""
+    try:
+        return importlib.metadata.version(distribution_name)
+    except importlib.metadata.PackageNotFoundError:
+        return "ei asennettu"
+
+
+def _print_dependency_repair(reason: str, details: List[str]) -> None:
+    """Print one actionable repair command for dependency problems and exit."""
+    print(f"Virhe: {reason}", file=sys.stderr)
+    for detail in details:
+        print(f"  - {detail}", file=sys.stderr)
+    print("\nAsenna tai päivitä kaikki tarvittavat paketit tällä komennolla:", file=sys.stderr)
+    print(f"  {_pip_install_command()}", file=sys.stderr)
+    print("\nAja sen jälkeen ohjelma uudelleen samassa virtuaaliympäristössä.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _load_third_party_dependencies():
+    """Import every non-standard-library dependency and report all failures at once."""
+    modules: Dict[str, Any] = {}
+    failures: List[str] = []
+
+    for distribution_name, module_name in REQUIRED_PACKAGES:
+        try:
+            modules[module_name] = importlib.import_module(module_name)
+        except Exception as error:
+            version = _distribution_version(distribution_name)
+            failures.append(
+                f"{distribution_name} ({version}): {error.__class__.__name__}: {error}"
+            )
+
+    if failures:
+        _print_dependency_repair(
+            "yksi tai useampi Python-riippuvuus puuttuu tai on rikki.",
+            failures,
+        )
+
+    openai_module = modules["openai"]
+    docx_module = modules["docx"]
+
+    try:
+        openai_class = openai_module.OpenAI
+        not_found_error = openai_module.NotFoundError
+        document_class = docx_module.Document
+    except AttributeError as error:
+        _print_dependency_repair(
+            "asennettu kirjasto ei tarjoa ohjelman tarvitsemaa rajapintaa.",
+            [str(error)],
+        )
+
+    return document_class, not_found_error, openai_class
+
+
+def _verify_openai_sdk(openai_class) -> None:
+    """Ensure the installed SDK supports GPT-5.6 explicit prompt-cache options."""
+    version = _distribution_version("openai")
+    probe_client = None
+
+    try:
+        # A dummy key is enough for local interface inspection; no API request is sent.
+        probe_client = openai_class(api_key="sk-dependency-interface-check")
+        create_signature = inspect.signature(probe_client.responses.create)
+        parameters = create_signature.parameters
+        accepts_arbitrary_keywords = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        supports_cache_options = (
+            "prompt_cache_options" in parameters or accepts_arbitrary_keywords
+        )
+    except Exception as error:
+        _print_dependency_repair(
+            f"openai SDK:n Responses API -rajapintaa ei voitu tarkistaa (versio {version}).",
+            [f"{error.__class__.__name__}: {error}"],
+        )
+    finally:
+        if probe_client is not None:
+            try:
+                probe_client.close()
+            except Exception:
+                pass
+
+    if not supports_cache_options:
+        _print_dependency_repair(
+            f"openai SDK on liian vanha (asennettu versio {version}).",
+            [
+                "Responses.create() ei tunne prompt_cache_options-parametria, "
+                "jota GPT-5.6:n eksplisiittinen prompt caching tarvitsee."
+            ],
+        )
+
+
+Document, NotFoundError, OpenAI = _load_third_party_dependencies()
+_verify_openai_sdk(OpenAI)
+OPENAI_SDK_VERSION = _distribution_version("openai")
+PYTHON_DOCX_VERSION = _distribution_version("python-docx")
 
 # Preferred model. GPT-5.6 explicit prompt caching is used when available.
 MODEL = "gpt-5.6"
@@ -71,7 +185,16 @@ def clean_text(s: str) -> str:
     return s.encode("utf-8", errors="ignore").decode("utf-8")
 
 
-client = OpenAI()  # Uses OPENAI_API_KEY from the environment.
+def _create_openai_client():
+    """Create the real API client with a clear error if the API key is missing."""
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("Virhe: OPENAI_API_KEY-ympäristömuuttuja puuttuu.", file=sys.stderr)
+        print('Aseta se esimerkiksi: export OPENAI_API_KEY="sk-..."', file=sys.stderr)
+        sys.exit(1)
+    return OpenAI()
+
+
+client = _create_openai_client()
 ACTIVE_MODEL: Optional[str] = None
 
 
@@ -549,6 +672,10 @@ def main() -> None:
             print(f"Error: File not found: {path}")
             sys.exit(1)
 
+    print(
+        f"Dependencies OK: openai {OPENAI_SDK_VERSION}, "
+        f"python-docx {PYTHON_DOCX_VERSION}."
+    )
     print("Loading input files:")
     for path in paths:
         print(f"  - {path}")
@@ -590,6 +717,8 @@ def main() -> None:
 
             if raw_question == "/status":
                 print(f"Active model: {ACTIVE_MODEL or '(selected on first real request)'}")
+                print(f"OpenAI SDK: {OPENAI_SDK_VERSION}")
+                print(f"python-docx: {PYTHON_DOCX_VERSION}")
                 print(f"Prompt cache key: {cache_key}")
                 print(f"Explicit cache TTL: {PROMPT_CACHE_TTL}\n")
                 continue
