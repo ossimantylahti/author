@@ -6,7 +6,6 @@ import openai
 from typing import Any, Dict, List, Optional, Tuple
 from packaging.version import Version
 
-
 from docx import Document
 from openai import NotFoundError, OpenAI
 
@@ -16,7 +15,8 @@ if Version(openai.__version__) < MIN_OPENAI_VERSION:
     raise RuntimeError(
         f"OpenAI SDK {openai.__version__} is too old. "
         f"Upgrade with: python3 -m pip install --upgrade openai"
-        f"or python3 -m pip install -U 'openai>={MIN_OPENAI_VERSION}'"
+        f"or "
+        f"python3 -m pip install -U 'openai>={MIN_OPENAI_VERSION}'"
     )
 
 # Preferred model. GPT-5.6 explicit prompt caching is used when available.
@@ -38,7 +38,7 @@ MODEL_FALLBACKS = [
 MAX_OUTPUT_TOKENS = 4000
 
 # How many automatic follow-up continuations to request at most.
-MAX_AUTO_FOLLOWUPS = 10
+MAX_AUTO_FOLLOWUPS = 16
 
 # If the model produces at least (MAX_OUTPUT_TOKENS - threshold), assume it may
 # have hit the ceiling when no explicit incomplete reason is available.
@@ -529,11 +529,11 @@ def ask_question(
 
 
 def _usage_exit() -> None:
-    print("Usage: python3 editoi_cached.py FILE1 [FILE2 ... FILE10]")
+    print("Usage: python3 editoi.py FILE1 [FILE2 ... FILE10]")
     print("Examples:")
-    print("  python3 editoi_cached.py manuscript.docx")
-    print("  python3 editoi_cached.py mts.txt staccato.json")
-    print("  python3 editoi_cached.py Edit2.docx staccato.csv notes.txt")
+    print("  python3 editoi.py manuscript.docx")
+    print("  python3 editoi.py mts.txt staccato.json")
+    print("  python3 editoi.py Edit2.docx staccato.csv notes.txt")
     sys.exit(1)
 
 
