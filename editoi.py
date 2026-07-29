@@ -2,10 +2,22 @@
 import hashlib
 import os
 import sys
+import openai
 from typing import Any, Dict, List, Optional, Tuple
+from packaging.version import Version
+
 
 from docx import Document
 from openai import NotFoundError, OpenAI
+
+MIN_OPENAI_VERSION = Version("2.48.0")
+
+if Version(openai.__version__) < MIN_OPENAI_VERSION:
+    raise RuntimeError(
+        f"OpenAI SDK {openai.__version__} is too old. "
+        f"Upgrade with: python3 -m pip install --upgrade openai"
+        f"or python3 -m pip install -U 'openai>={MIN_OPENAI_VERSION}'"
+    )
 
 # Preferred model. GPT-5.6 explicit prompt caching is used when available.
 MODEL = "gpt-5.6"
