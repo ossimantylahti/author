@@ -1,0 +1,181 @@
+## (1) Yleiset periaatteet
+
+### Teoksen lupaus ja lukukokemus
+- **Ydin:** sosiaalinen media (Twitch, chat, klipit, algoritmit) törmää *suomalaiseen* arkeen ja instituutioihin (poliisi, media, kaupunkihanke), ja tragedia syntyy siitä, että “todellisuus muuttuu sisällöksi”.
+- **Tavoite es-MX-lukijalle:** sama jännite ja ironia kuin suomeksi, ilman että Helsinki “mexicanisoituu”. Lukija saa tuntea olevansa Suomessa, mutta tekstin lukeminen on sujuvaa ja kulttuurisesti luontevaa.
+
+### Äänensävy ja rekisteri: päälinjat
+- **Kertojaosuudet:** säilytä tekstin *tarkka, välillä esseemäinen, välillä runollinen* proosa. Espanjaksi tavoite on **kirjallinen mutta nykyhetkinen** (“literario contemporáneo”), ei ylikoristeinen.
+- **Elias:** puheessa ja ajattelussa yhdistyvät nörttitarkkuus, väsynyt huumori ja hetkittäinen eettinen itsetietoisuus. Pidä hänet **suorasanaisena**, älä tee hänestä “latinodramaattista”.
+- **Miksu:** energinen, myyvä, “bro”-retoriikka. Espanjaksi **mexico-yleinen some-/podcast-rytmi**, mutta varo “fresa”-liikaa. Hän on manipuloiva mutta myös aidosti innostuva.
+- **Virtanen:** lakoninen, virallinen, kuivahko. Espanjaksi **registro institucional mexicano** ei saa kuulostaa Meksikon poliisilta; siksi käytä neutraalia standardiespanjaa, mutta pidä viralliset kaavat (”queda usted informado…”) maltillisina.
+- **Arkkitehti:** kylmä, estetiikkaan ja järjestykseen pakkomielteinen, aforistinen. Espanjaksi **preciso, filosófico, con léxico de arquitectura/estructura/ritmo**, ei karikatyyrinen “villano”.
+
+### Dialogin rytmi ja tekstuaalinen leikkaus
+- Teoksessa on paljon **nopeita leikkauksia** (chat, uutisotsikot, poliisin repliikit, someviestit). Espanjaksi pidä:
+  - lyhyet repliikit lyhyinä,
+  - rivinvaihdot ja typografia osana tempoa,
+  - numerot, kellonajat ja laskurit yhtä rytminä (Katsojia: 92 → *Espectadores: 92*).
+
+### Huumori, ironia ja satiiri
+- Huumori on usein **kuivaa, yhteiskunnallista ja meta-ironista** (media, algoritmit, sponsorilogot tragedian päällä).
+- Vältä korvaamasta suomalaisia ilmiöitä meksikolaisilla analogeilla: **analogia vältettävä** ellei kyse ole täysin ymmärrettävästä yleisestä ilmiöstä (esim. “clickbait” on universaali).
+- Meemitaso säilytetään: osa vitseistä saa jäädä “vieraan kulttuurin” omituisuudeksi (se on osa kokemusta).
+
+### Rikosromaanin jännite
+- Pidä **tiedon kontrollin teema** kirkkaana: kuka julkaisee, mitä julkaistaan, milloin julkaistaan (esitutkinta, vihjeet, embargo).
+- Vältä selittämistä, joka rikkoo jännitteen. Jos jotain on pakko avata, tee se **huomaamattomalla lisämääreellä** (esim. “la tienda de barrio Alepa”).
+
+### Twitch-chat / kuoro / järjestelmä-ääni
+- **Chat:** nopea, sekakielinen, emoji- ja lyhennepitoinen. Espanjaksi:
+  - säilytä “internet bilingual” -tuntuma: osa termeistä jätetään englanniksi (GG, clip, streamer, mod, ban).
+  - meksikolainen chattituntuma: *no mames*, *qué pedo*, *wey* – mutta käytä säästeliäästi, ettei vanhene tai muutu farssiksi.
+- **Kuoro (chorus):** joskus lähes antiikin kuoro, joskus koneellinen metakuoro, joskus “@system”. Säilytä eri äänet typografialla ja rekisterillä:
+  - *[coro]* kirjallisempi, rytminen.
+  - *[@system]* tekninen, englanti sallittu.
+  - Emojit vain jos alkuperäisessä on; muuten ei lisäillä.
+
+### Kirosanat ja slangi (es-MX)
+- Teoksessa on suomen kirosanoja (“vittu”, “helvetti”, “perkele”, “ei hel…”) ja puhekielen täytesanoja.
+- **Periaate:** käännä vaikutus, ei sanaa.
+  - “vittu” usein: **“puta madre”, “no mames”, “chingada”** kontekstin mukaan.
+  - “helvetti” usein: **“al diablo / demonios / al carajo”**.
+  - “perkele” voidaan usein hoitaa **“carajo / maldita sea”**, tai jättää joskus “perkele” mausteeksi, jos halutaan suomalainen leima (mutta johdonmukaisesti ja harvoin).
+- Vältä Espanjan-espanjan kiroilua (*joder, hostia*) ellei henkilöhahmo nimenomaan tuota rekisteriä vaadi (ei vaadi).
+
+### Suomenkieliset termit ja erisnimet: säilytä Suomi
+- Paikat (Vuosaari, Kallio, Pasila, Bulevardi) pidetään **alkuperäisinä**. Älä käännä “Bulevardi” → *Bulevar* tekstissä; se on katu Helsingissä.
+- Kauppojen/medioiden nimet pidetään alkuperäisinä, mutta ensimmäisellä kerralla voi lisätä minimaalisen määreen.
+- Viranomaisnimikkeet: usein kannattaa kääntää funktio (komisario → *comisario*), mutta jättää suomen instituution tuntuma (Helsingin poliisilaitos → *la Policía de Helsinki* tms. ilman meksikolaisia rakenteita kuten *Fiscalía*).
+
+### Milloin selittää, milloin jättää selittämättä
+- **Selitä kerran**: kun termi on toistuva tai juonen kannalta tärkeä (Alepa, Prisma, “Alepa-pipo”, “puolisoturi”, embargo, vinkkilomake, Pasila poliisitalo, Assembly, Musiikkitalo).
+- **Jätä selittämättä**: pienet paikalliset yksityiskohdat, jotka toimivat tunnelmana (ratikan ääni, loska, Alepan punalaput) – lukija ymmärtää kontekstista.
+- **Alaviitteet vältettävä**: tämä on romaani ja rytmi on tärkeä. Jos selitys tarvitaan, tee se lauseessa tai huomaamattomana appositiona.
+
+---
+
+## (2) Lokalisointitaulukko (vähintään 25)
+
+| Lähdetermi/viite (FI) | Mitä se tarkoittaa suomalaisessa kontekstissa | Meksikolaisen lukijan todennäköinen ymmärrysongelma | Suositeltu käännösratkaisu es-MX | Esimerkkilause es-MX |
+|---|---|---|---|---|
+| Alepa | Helsinkiläinen lähikauppaketju | “Mikä tämä on?” | jätä alkuperäiseksi + selitä kerran | *Entró al **Alepa**, la tiendita de barrio, justo cuando ponían las rebajas.* |
+| Prisma | Suuri hypermarket (S-ryhmä) | Ei tiedä mittakaavaa | jätä alkuperäiseksi + selitä kerran | *En **Prisma**, el hipermercado, el pasillo olía a pan recién horneado y desinfectante.* |
+| Vuosaari | Helsingin kaupunginosa, satama ja ulkoilualueet | Ei paikannusta | jätä alkuperäiseksi + selitä kerran | *En **Vuosaari**, la niebla subía del mar y se tragaba las luces una por una.* |
+| Kallio | Helsingin kaupunginosa, “urbaani” ja tiivis | Ei tunne sävyä | jätä alkuperäiseksi + huomaamaton lisämääre | *Vivía en **Kallio**, un barrio denso de Helsinki, lleno de estudios y bares.* |
+| Kirkkonummi | Kunta Helsingin lähellä | Ei kontekstia | jätä alkuperäiseksi + lyhyt sisäinen selitys | *El plan lo llevó hasta **Kirkkonummi**, a las afueras del área metropolitana de Helsinki.* |
+| Pasila / Pasilan poliisitalo | Poliisilaitos/alue Helsingissä | “Mikä tämä paikka on?” | jätä alkuperäiseksi + selitä kerran | *Lo citaron en **Pasilan poliisitalo**, la comisaría central de Pasila.* |
+| Helsingin Sanomat | Suomen suurin sanomalehti | Ei tunne painoarvoa | jätä alkuperäiseksi + huomaamaton lisämääre | *En **Helsingin Sanomat**, el diario nacional, el titular lo aplastaba todo.* |
+| Musiikkitalo | Konserttitalo Helsingissä | Ei tiedä mikä | jätä alkuperäiseksi + selitä kerran | *En el **Musiikkitalo**, la sala olía a perfume caro y a madera pulida.* |
+| Assembly | Suuri lanitapahtuma Suomessa | Ei tunne ilmiötä | jätä alkuperäiseksi + selitä kerran | *En **Assembly**, el gran evento LAN de Helsinki, el techo respiraba neón.* |
+| Alepa-pipo | Halpa mainospipo Alepasta (teksti “KALLIO” / myöhemmin “KLAUKKALA”) | Miksi pipo on tärkeä? | lyhyt sisäinen selitys lauseessa | *Llevaba el **gorro promocional de Alepa**, amarillo chillón, como si fuera parte del personaje.* |
+| “Kallio” / “Klaukkala” pipossa | Paikannimi pipon kyljessä → todistevirhe | Lukija ei hahmota merkitystä | huomaamaton lisämääre | *En el gorro no decía **Kallio**, decía **Klaukkala**: otra tienda, otro lugar.* |
+| “puolisoturi” | Halventava sisäpiirisana (liikkeen sisällä); myöhemmin “Puolisoturin palkkio” | Merkitys ei aukea | jätä alkuperäiseksi + selitä kerran | *La palabra **puolisoturi**—“soldado a medias”, un leimaava haukkumasana—quedó flotando en el aire.* |
+| “Puolisoturin palkkio” | Kortin teksti, vihje lavastuksesta | Ei ymmärrä | jätä alkuperäiseksi + lyhyt sisäinen selitys | *En el reverso se leía: **Puolisoturin palkkio**, “recompensa del puolisoturi”.* |
+| vinkkilomake | Poliisin vihje-/tip-formi | Ei tunne järjestelmää | suora käännös | *El **formulario de pista** estaba ahí, esperando una firma.* |
+| embargo | Julkaisukielto tiettyyn aikaan asti | Tunnetaan espanjaksi, mutta käytä termiä oikein | suora käännös | *El texto venía con **embargo**: publicar antes de las 19:00 activaba la alerta.* |
+| striimi / streami | Live-lähetys netissä | Termi vaihtelee | jätä alkuperäiseksi + selitä kerran (valitse yksi termi) | *En su **stream** de Twitch, el contador marcaba: **Espectadores: 92**.* |
+| Twitch-chat | Reaaliaikainen keskustelu | Tunnetaan, mutta termi | suora käännös / jätä brändi | *El **chat de Twitch** avanzaba como una lluvia de chistes y amenazas.* |
+| moderaattori / mod | Chatin ylläpitäjä | Tunnetaan “mod” | jätä alkuperäiseksi + selitä kerran | *El **mod** activó el slow mode: “manténganse al tema”.* |
+| klippi / klippaa | Pätkä / tee pätkä | “clip” tunnetaan | suora käännös (anglismi sallittu) | *“Alguien **clipee** esto y súbalo a YouTube”, escribió uno.* |
+| katsojaluvut | viewer count | Selkeä, mutta idiomi | suora käännös | *Los **números de espectadores** ya no alcanzaban ni cincuenta.* |
+| GO LIVE | lähetyksen aloitusnappi | Tunnetaan | jätä alkuperäiseksi | *Un clic. **GO LIVE**.* |
+| slow mode | viive chatissa | Tunnetaan | jätä alkuperäiseksi | *“**Slow mode** 5s”, anunció el mod.* |
+| ban / permabanni | estää käyttä
+| permabanni | pysyvä porttikielto/tilinesto alustalla | “permaban” tunnetaan, mutta sävy | jätä alkuperäiseksi | *“Bro se ganó **permaban**”, escribió alguien, y el chat se rió.* |
+| Ylilauta | suomalainen anonyymi keskustelupalsta | Ei tunne | jätä alkuperäiseksi + selitä kerran | *El clip circuló por **Ylilauta**, un foro anónimo finlandés.* |
+| Jodel | paikallinen anonyymi sovellus (viitataan juoruina) | Ei tunne | jätä alkuperäiseksi + huomaamaton lisämääre | *“Como un chisme fresco de **Jodel**”, dijo, y la frase se entendió igual.* |
+| Discord | yhteisöalusta (kanavat, päivitykset) | Tunnetaan | suora käännös | *En **Discord** ya pedían “updates” cada diez minutos.* |
+| Signal | salattu viestisovellus | Tunnetaan heikommin | jätä alkuperäiseksi + selitä kerran | *Le escribió por **Signal**, la app de mensajes cifrados.* |
+| “rikoskomisario” | poliisin tutkinnanjohtaja-tyyppinen virkanimike | Ei vastaa MX-rakenteita | suora käännös + säilytä suomalaistuntuma | *El **comisario** Virtanen habló con voz seca, de oficina pública.* |
+| “rikoskonstaapeli” | alempi tutkija/konstaapeli | Ei selvä | suora käännös | *El **agente** Korhonen tomó notas sin levantar la vista.* |
+| esitutkinta | esitutkintavaihe, pre-trial investigation | Tunnetaan osin | suora käännös | *“Puede **entorpecer la investigación preliminar**”, dijo Virtanen.* |
+| “ihmisarvoa loukkaava tiedon levittäminen” | rikosnimike/ajatus ihmisarvon loukkaamisesta | Pitkä ja juridinen | lyhyt sisäinen selitys lauseessa | *Lo investigaban por posible **difusión de material que degrada la dignidad humana**.* |
+| “vinkkilaatikko” | poliisin vihjeiden vastaanotto | Ei idiomi | suora käännös | *“No saturen el **buzón de pistas** de la policía”, pidió.* |
+| “vapaaehtoinen DNA-näyte” | poskisolunäyte | Selkeä | suora käännös | *Le pidieron una **muestra de ADN voluntaria**: un hisopo en la mejilla.* |
+| “länsi-/itä-Helsinki” (Itä-Helsinki) | alueellinen mielikuva | Ei tunne sävyä | huomaamaton lisämääre | *Hablaba de **Itä-Helsinki**, el este de Helsinki, como si fuera otro país.* |
+| ratikka / Spåra | raitiovaunu, paikallinen ääni ja arki | Tuntematon sana | jätä alkuperäiseksi + selitä kerran | *El **ratikka** chirrió en la curva: el tranvía de Helsinki sonaba a casa.* |
+| loska | räntälumi/sohjo, toistuva motiivi | Ei suoraa vastaavaa | jätä alkuperäiseksi + selitä kerran | *La **loska**—esa mezcla de nieve y lodo—brillaba bajo las farolas.* |
+| sumutorvi | laivan sumutorvi, satamatunnelma | Selkeä | suora käännös | *Un **bocina de niebla** rugió desde el puerto, demasiado cerca.* |
+| “Aaria” (halli) | Helsingin uusi jäähalli/areena (fiktiivinen hanke) | Ei tiedä että projekti | jätä alkuperäiseksi + selitä kerran | *“**Aaria**”, el nuevo estadio multipropósito de Helsinki.* |
+| “Aaria-hanke” | projekti, rahoitus, korruptio | Selkeä | suora käännös | *El **proyecto Aaria** era una máquina de dinero y silencio.* |
+| “Ukrainan pakolaisrahasto” | kaupungin rahasto | Ei tunne suomalaista hallintoa | lyhyt sisäinen selitys lauseessa | *Un **fondo municipal para refugiados ucranianos**, aprobado por el gobierno de la ciudad.* |
+| “tilinpäätöskertomus” | tilinpäätösraportti | Jargon | suora käännös | *Hablaba de **informes de cierre contable** como si fueran aseita.* |
+| “hankintayhtiö” | procurement company / city procurement vehicle | Jargon | huomaamaton lisämääre | *Mencionó una **empresa de compras públicas** vinculada al municipio.* |
+| “luottamushenkilö” | elected official / trustee | Ei suoraa | suora käännös + huomaamaton lisämääre | *Los **cargos de confianza** del ayuntamiento tenían acceso ampliado a datos.* |
+| “pöydällepano” | asian siirtäminen/pöydälle | Ei tunne hallintotermiä | lyhyt sisäinen selitys lauseessa | *Pidió el **aplazamiento** del punto—“dejarlo sobre la mesa”—para ganar tiempo.* |
+| “kyyditys” | pelottelu-/sieppausretki (kontekstissa laiton) | Sana voi kuulostaa neutraalilta | lyhyt sisäinen selitys lauseessa | *Hablaban de una **“kyyditys”**, un “paseo” intimidatorio para quebrar a alguien.* |
+| “puhelin: Älä häiritse” | Do Not Disturb -tila | Tunnetaan | suora käännös | *Teléfono: **No molestar** activado. Batería 14 %.* |
+| “Katsojia: 92” | streamin mittari | Selkeä | suora käännös | ***Espectadores: 92.*** |
+| “Tilaajia” | subscribers | Selkeä | suora käännös | ***Suscriptores: 9.*** |
+| “bits” | Twitchin mikromaksu | Tunnetaan osin | jätä alkuperäiseksi + selitä kerran | *Alguien les mandó **bits**, una propina digital de Twitch.* |
+| “overlay” | ruudun päälle tuleva sponsorigrafiikka | Tunnetaan | jätä alkuperäiseksi | *El sponsor quería un **overlay** en la esquina superior.* |
+| “VPN, alehinta koodilla” | sponsoripuhe | Selkeä | suora käännös | *“VPN con descuento usando el código reakti0n; link en la bio”.* |
+| “MoccaMaster” | suodatin­kahvikeitin poliisilaitoksella | Ei tunne brändiä | jätä alkuperäiseksi + huomaamaton lisämääre | *La **MoccaMaster** goteaba café como si marcara el inicio del turno.* |
+| “Martela Logic 400” | suomalainen toimistotuoli | Ei merkityksellinen | analogia vältettävä | *Se hundió en su silla **Martela Logic 400** y no dijo nada.* |
+| “Genelec” | kaiutinmerkki | Ei merkityksellinen | jätä alkuperäiseksi (ei selitystä) | *Los bajos salieron por los **Genelec** como un golpe seco.* |
+| “Lilienthal Berlin Huxley Blue Orange” | kellomalli, Arkkitehdin fetissi | Pitkä nimi | jätä alkuperäiseksi + ei selitystä (tyyliä) | *Miró su **Lilienthal Berlin Huxley Blue Orange** y contó hasta siete.* |
+| “firmitas, utilitas, venustas” | Vitruviuksen periaatteet | Klassinen, ymmärrettävä | suora käännös (latinaksi jätetään) | *Enmarcadas: **firmitas, utilitas, venustas**.* |
+| “Sonnenrad” | musta aurinko -symboli (äärioikeisto) | Tunnetaan heikosti | jätä alkuperäiseksi + selitä kerran | *El **Sonnenrad**, “sol negro”, colgaba detrás del escenario.* |
+| “Mein Kampf” | Hitlerin teos | Tunnetaan | suora käännös (nimi alkuperäinen) | *La portada decía **Mein Kampf**.* |
+| “keffiyeh / palestiinalaishuivi” | huivi, poliittinen symboli | Tunnetaan osin | jätä alkuperäiseksi + selitä kerran | *Llevaba una **keffiyeh**, el pañuelo palestino, en una escena que no cuadraba con nada.* |
+
+### Termipankki (proper nouns & key terms) – yhdenmukaiset muodot
+**Pidä nämä muodot aina samoina (isot kirjaimet/typografia):**
+- **Twitch**, **Discord**, **Signal**, **YouTube**, **Reddit**, **X** (jos mainitaan), **Ylilauta**, **Jodel**
+- **Alepa**, **Prisma**, **S-market**, **K-Citymarket**
+- **Vuosaari**, **Kallio**, **Pasila**, **Bulevardi**, **Kirkkonummi**, **Mustikkamaa**, **Koli**, **Lieksa**, **Pielinen**
+- **Helsingin Sanomat**, **YLE**, **Iltalehti**, **MikroBitti**, **Seiska** (mediaotsikoissa jätä nimet)
+- **Aaria** (projekti / halli: *Aaria* kursivoimatta)
+- Hahmot: **Elias Korpela**, **Reakti0n** (nollalla), **Mikael “Miksu” Blomkvist**, **CherryKitten**, **Virtanen**, **Korhonen**, **NordicTruth88 / Norri**, **PaperTrail (Linnea Berg)**, **Arkkitehti**
+- Stream-termistö (es-MX):
+  - **stream** (ei *transmisión* joka kerta; vaihtele harkiten)
+  - **streamear** (verbinä), **streamer**
+  - **chat de Twitch**
+  - **mod** / **moderador** (valitse: suositus **mod** dialogissa ja chatissa; kerronnassa “moderador” ok)
+  - **clip / clipear**
+  - **Espectadores:** (katsojalaskuri)
+  - **Suscriptores:** (tilaajat)
+  - **bits** (selitä kerran)
+  - **overlay** (selitä kerran)
+  - **slow mode** (selitä kerran)
+  - **GO LIVE** (pidä englanniksi)
+
+### “Selitä kerran” -lista (ensiesiintymä + miten lyhyesti)
+Selitä ensimmäisellä esiintymällä, jatkossa ilman selitystä:
+1. **Alepa**: *“Alepa, una tiendita de barrio”*
+2. **Prisma**: *“Prisma, el hipermercado”*
+3. **Kallio / Vuosaari / Pasila**: yksi huomaamaton maantieteellinen ankkuri (*“barrio de Helsinki”*)
+4. **ratikka**: *“ratikka, el tranvía”*
+5. **loska**: *“loska, nieve con lodo/aglutinada”*
+6. **Assembly**: *“Assembly, el gran evento LAN (lan party) finlandés”*
+7. **Musiikkitalo**: *“Musiikkitalo, la sala de conciertos de Helsinki”*
+8. **Helsingin Sanomat**: *“el diario nacional Helsingin Sanomat”*
+9. **Alepa-pipo**: *“gorro promocional de Alepa”*
+10. **puolisoturi**: *“insulto interno: ‘soldado a medias’”*
+11. **Sonnenrad**: *“Sol Negro, símbolo extremista”*
+12. **bits / overlay / slow mode**: lyhyet streamer-termit.
+
+### 10 konkreettista johdonmukaisuussääntöä
+1. **Paikat pysyvät suomeksi**: älä käännä kaupunginosia (*Kallio*, ei *“Barrio Kallio”* joka kerta).
+2. **Kauppaketjut alkuperäisinä**: Alepa/Prisma/S-market/K-Citymarket; selitä kerran, ei analogioita (*Oxxo* tms. vältettävä).
+3. **Viranomaisnimikkeet yhtenäisesti**: *rikoskomisario → comisario*, *konstaapeli → agente*; älä käytä meksikolaista *ministerio público* -kehystä.
+4. **Chat-muoto säilyy**: hakasulkeet nimimerkeille, nopea rytmi, emojis vain kun alkuperäinen sisältää.
+5. **Kirosanat “vaikutuksella”**: sama kohtaus = sama intensiteetti. Älä nosta tai laske tasoa sattumalta.
+6. **Tekniikkatermit johdonmukaisesti**: *stream, mod, clip, bits, overlay, GO LIVE* pidetään samoina (selitys vain kerran).
+7. **Arjen rit
+uaalit ovat tärkeitä**: kahvi, alennustuotteet, pipo, loska, ratikan ääni – pidä ne konkreettisina, älä selitä puhki.
+8. **Mediaotsikot säilytetään suomalaisina brändeinä**: otsikko käännetään es-MX:ksi, mutta lähde (YLE/Iltalehti/HS/MikroBitti/Seiska) säilyy.
+9. **Kuoro vs. chat vs. kertoja erotetaan aina** typografialla ja rekisterillä; kuoro voi olla runollisempi.
+10. **Älä siivoa moraalista ristiriitaa**: jätä sponsorilogo/raha-tragedia -kontrasti yhtä kylmäksi kuin suomeksi.
+
+### 5 varoitusta tyypillisistä virheistä
+1. **Liika selittäminen**: romaanin tempo kärsii; vältä alaviitteitä ja pitkää taustoitusta.
+2. **Väärä rekisteri**: älä tee kaikesta slangia; poliisi ja arkkitehti vaativat kontrolloidun kielen.
+3. **Espanjan-espanjan sanavalinnat**: vältä *ordenador, móvil (liikaa), joder, hostia*; suosi es-MX: *computadora, celular, no mames/puta madre* harkiten.
+4. **Liiallinen anglisismi**: hyväksy osa (stream, clip, mod), mutta älä muuta kaikkea englanniksi; pidä kirjallinen selkeys.
+5. **Slangin vanheneminen**: liian trendikäs TikTok-slangi vanhenee nopeasti; käytä kestäviä meksikolaisia ilmauksia ja vältä ylisitoutumista hetkellisiin fraaseihin.
+
+--------------------------------------------------------------------------------
+
+Kysymys>

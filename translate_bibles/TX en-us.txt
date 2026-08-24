@@ -1,0 +1,187 @@
+## (1) General principles (en-US)
+
+### Positioning & target feel
+- **Genre blend:** literary crime / dark-comedy noir with platform-age satire—“Coen-adjacent” in its deadpan absurdity and moral weirdness, but still *literary* and image-driven. The humor is often **dry, structural, and cruelly situational**, not jokey.
+- **Momentum:** keep the narrative **clean and forward-driving**. The book already has strong scene cuts (streams → police → media → private messages). Translation should preserve that kinetic pacing.
+
+### Finland stays Finland (no domestication)
+- **All places remain in Finland** (Helsinki districts like Vuosaari, Kallio, Pasila; Bulevardi; Kirkkonummi; Lieksa; Koli; Pielinen; Musiikkitalo; Assembly).
+- **No American replacements** for Finnish institutions, stores, or outlets (no “7‑Eleven,” “Walmart,” “NYT,” “FBI” unless the source explicitly mentions a US outlet like Fox News).
+- The reading experience should feel like: *“I’m in Helsinki, but I’m reading fluent American English.”*
+
+### Voice & register
+- **Narration:** modern literary noir—precise sensory detail, occasional lyrical lift, frequent ironic distance. Keep sentences **tight**; don’t inflate with explanatory clauses.
+- **Elias:** grounded, slightly nerdy, self-aware, increasingly hardened. Keep him **plainspoken** with controlled emotion (his big swings land harder if the baseline is restrained).
+- **Miksu:** hype-and-hustle producer voice; internet-native. In en-US he can say “bro,” “this is huge,” “content,” “algorithm,” but avoid caricature.
+- **Virtanen:** procedural, exhausted, principled but pressured. Use **neutral US police language** (interview room, evidence, custody) while preserving that he’s **Finnish police** (no US-legal boilerplate unless the text calls for it).
+- **Arkkitehti:** controlled, aesthetic, quasi-religious rationalism. Use **cold, architectural diction**; aphoristic lines should feel like engineered steel.
+
+### Comedy, irony, and dark satirical bite
+- The book’s funniest moments are often:
+  - bureaucracy colliding with the internet,
+  - tragedy colliding with branding (“sponsor logo in the corner”),
+  - Finland’s quiet surfaces hiding grotesque spectacle,
+  - “too real” platform reactions.
+- Translate to **American deadpan**: understatement, bluntness, and timing. Avoid stand-up style or punchline rewriting.
+- **Let the absurdity stand** (e.g., “Plussa card” used during a crime; selfie evidence; “Uno cards” in Seiska). Don’t over-explain the joke.
+
+### Suspense mechanics
+- Preserve suspense through:
+  - **information gating** (what police know vs what the stream reveals),
+  - **process** (evidence handling, chain-of-custody vibe, legal/ethical constraints),
+  - **public noise** (tips flooding; media spirals; clip economy).
+- Avoid smoothing contradictions too early; the novel uses misreadings (e.g., the beanie text) as tension devices.
+
+### Twitch chat / chorus / system: keep layers distinct
+The text uses multiple “channels”:
+1. **Twitch chat** (fast, meme-y, often bilingual).
+2. **News headlines/outlets** (YLE vs Iltalehti vs HS vs MikroBitti vs Seiska).
+3. **Chorus / @system** (tragic chorus meets machine log).
+**Rule:** preserve formatting and voice separation:
+- handles in brackets,
+- short lines,
+- emojis only when present,
+- technical log strings kept technical.
+
+### Spoken language & swearing (en-US)
+- Use natural US profanity, but **don’t oversalt**: the Finnish original’s harshness is often brief and sharp.
+- Suggested intensity mapping (context-sensitive):
+  - “vittu” → “fuck,” “fucking,” “holy shit”
+  - “helvetti” → “hell,” “what the hell,” “goddamn”
+  - “perkele” → usually translate by effect (“for fuck’s sake”), or keep **perkele** once as Finnish flavor (explain once) but don’t turn it into a gimmick.
+- **Avoid teen slang** and fast-aging TikTok phrases. Prefer durable contemporary US internet language: “WTF,” “no way,” “this is insane,” “clip it,” “cap,” “POG” (sparingly), “IRL,” “true crime.”
+
+### Technical terms & anglicisms
+- Streaming/e-sports terms are already English-adjacent: keep them fluent and accurate (stream, VOD, mod, ban, overlay, slow mode, bitrate, LUFS, SHA‑256).
+- Don’t “translate tech into prose explanations” unless the source already frames it as explanation. The novel often uses technicality as *texture* and *authority*.
+
+### Explain vs leave untranslated (footnotes discouraged)
+- **Footnotes discouraged**: they break thriller pace and multi-voice rhythm.
+- Use:
+  - **Keep original + explain once** for recurring Finland-specific brands/institutions that matter.
+  - **Brief in-sentence gloss** where needed for first-time clarity.
+  - **Unobtrusive appositive** (“Alepa, a neighborhood convenience store”).
+- Leave unexplained:
+  - street names, minor local references that read as atmosphere,
+  - most Finnish proper nouns once anchored.
+
+---
+
+## (2) Localisation table (en-US) — 30 entries
+
+| Source term/reference (FI) | Meaning in Finnish context | Likely friction for a US reader | Recommended solution | Example sentence in en-US |
+|---|---|---|---|---|
+| Alepa | Helsinki convenience store chain | Unknown brand | keep original + explain once | *He ducked into **Alepa**, the neighborhood convenience store, right as the discounts hit.* |
+| Prisma | Large hypermarket (S Group) | Unknown; scale | keep original + explain once | *At **Prisma**, the big-box hypermarket, the air smelled like fried chicken and detergent.* |
+| S‑market | Supermarket brand (S Group) | Unknown | keep original + explain once | *Two cops walked up while he was bagging groceries at the **S‑market** register.* |
+| K‑Market | Kesko neighborhood grocery | Unknown | keep original + explain once | *He bought coffee at **K‑Market**, the corner grocery, because it was the closest.* |
+| K‑Citymarket | Kesko big supermarket/hypermarket | Unknown | keep original + explain once | *They grabbed rope and duct tape at **K‑Citymarket**, the big Kesko supermarket.* |
+| Alepa‑pipo | Alepa promo beanie, place-name stitched | Why it matters | brief in-sentence gloss | *He wore the bright yellow **Alepa beanie**, a promo hat with a district name stitched on the side.* |
+| “KALLIO” / “KLAUKKALA” on beanie | Location text; key evidence twist | US reader may miss significance | unobtrusive appositive | *It didn’t say **Kallio**. It said **Klaukkala**—a different place, a different beanie.* |
+| Vuosaari | Helsinki district (harbor/shore) | Unfamiliar geography | keep original + explain once | *In **Vuosaari**, Helsinki’s eastern harbor district, the fog swallowed the lights.* |
+| Kallio | Inner-city Helsinki neighborhood | Connotations unclear | unobtrusive appositive | *He lived in **Kallio**, a dense inner-city neighborhood in Helsinki.* |
+| Kirkkonummi | Municipality near Helsinki | Name feels unmoored | keep original + explain once | *They drove out to **Kirkkonummi**, west of Helsinki, where the roads went dark.* |
+| Pasila / Pasilan poliisitalo | Main police complex in Pasila | “poliisitalo” literal | keep original + brief gloss | *They told him to come to **Pasilan poliisitalo**, Pasila’s main police station.* |
+| Helsingin Sanomat | Major Finnish daily | Unknown outlet | keep original + explain once | *By morning **Helsingin Sanomat**, Finland’s biggest daily, had it on the front page.* |
+| YLE | Finnish public broadcaster | Unknown | keep original + explain once | *On **YLE**, Finland’s public broadcaster, they kept saying, “no comment.”* |
+| Iltalehti | Finnish tabloid | Tone might be missed | keep original + unobtrusive appositive | *Even **Iltalehti**, the tabloid, ran it like a horror trailer.* |
+| MikroBitti | Tech magazine | Unknown | keep original + unobtrusive appositive | ***MikroBitti**, the tech magazine, turned the whole thing into a bitrate autopsy.* |
+| Seiska | Finnish celebrity tabloid | Unknown | keep original + unobtrusive appositive | *And then **Seiska**, the celebrity rag, showed up with Uno-card “tarot.”* |
+| Musiikkitalo | Helsinki concert hall | Unknown venue | keep original + explain once | *At **Musiikkitalo**, Helsinki’s concert hall, the intermission smelled like champagne.* |
+| Assembly | Finnish LAN / gaming event | Unknown cultural reference | keep original + explain once | *At **Assembly**, Finland’s flagship LAN event, the ceiling pulsed with neon.* |
+| ratikka | Helsinki tram | Unknown word | keep original + explain once | *The **ratikka**—the tram—screeched through the curve like it always did.* |
+| loska | Slushy snow-mud mix | No single US term | keep original + brief gloss | *The **loska**, that half-snow half-mud slush, shone under the streetlights.* |
+| sumutorvi | Ship foghorn | Easy | direct translation | *A foghorn groaned somewhere behind the mist.* |
+| esitutkinta | Pre-trial investigation phase | US readers may not map term | brief in-sentence gloss | *It could compromise the **pre-trial investigation**—the evidence-gathering phase.* |
+| kuulustelu | Police questioning session | “interrogation” vs “interview” nuance | direct translation (choose per scene) | *The **interrogation** began at 17:33. Present: Virtanen, Korhonen, Elias Korpela.* |
+| “vapaaehtoinen DNA‑näyte” | Voluntary cheek swab | Clear | direct translation | *They asked for a **voluntary DNA sample**—a swab against his cheek.* |
+| “vinkkilomake” | Tip-off form | Clear | direct translation | *The **tip-off form** sat there on the table, waiting for a signature.* |
+| “vinkkilaatikko” | Police tip channel / inbox | Clear-ish | brief in-sentence gloss | *Don’t flood the police **tip inbox** with the same clip, he warned.* |
+| embargo | Publication hold until set time | Familiar | direct translation | *The email came with an **embargo**: publish before 19:00 and the alarm goes off.* |
+| “puolisoturi” | Derogatory in-group term “half-soldier” | Opaque but important | keep original + explain once | *“**Puolisoturi**,” he said—“half-soldier,” a slur inside their own circle.* |
+| Twitch‑chat | Live chat stream | Familiar | direct translation | *The **Twitch chat** scrolled like it was trying to drown the video.* |
+| moderaattori / mod | Chat moderator | Familiar | direct translation | *The **mod** turned on slow mode: five seconds per message.* |
+| klippi / klippaa | Clip / to clip | Familiar | direct translation | *“Somebody **clip** this and upload it,” the chat demanded.* |
+| katsojia / tilaajia | Viewers/subscribers counters | Need consistency | direct translation | ***Viewers: 92.** **Subscribers: 9.*** |
+
+---
+
+## (3) Terminology & consistency (Localisation Bible)
+
+### A. Standard forms (US spelling, capitalization, hyphenation)
+
+**US spelling baseline**
+- Use US spellings: **color, center, analyze, defense, program, license**.
+- Keep Finnish proper nouns unchanged.
+
+**Places & institutions (keep Finnish names)**
+- Vuosaari, Kallio, Pasila, Bulevardi, Kirkkonummi, Mustikkamaa, Lieksa, Koli, Pielinen, Tryvikintie, Porvarinlahti, Aurinkolahti, Mustavuori, Alppipuisto.
+- Keep **Pasilan poliisitalo** once with a gloss; afterward you can use **Pasila police station** when rhythm requires.
+
+**Media outlets (keep as brands)**
+- Helsingin Sanomat, YLE, Iltalehti, Vuosaari-lehti, Kirkko ja Kaupunki, Verkkouutiset, MikroBitti, Seiska.
+
+**Retail (standardize hyphenation)**
+- Alepa, Prisma
+- **S-market** (hyphen)
+- **K-Market**, **K-Citymarket** (hyphen)
+
+**Character names & handles**
+- Elias Korpela; handle **Reakti0n** (zero must stay).
+- Mikael Blomkvist / **Miksu**
+- **CherryKitten** (capital K)
+- Virtanen, Korhonen
+- NordicTruth88 / Norri
+- Linnea “PaperTrail” Berg (PaperTrail as handle)
+- Arkkitehti: choose one consistent rendering:
+  - Recommended: **the Architect** in narration (role/title), and **Arkkitehti** only when it appears as a label/heading or when you want an intentional Finnish “codename” feel. Don’t mix casually.
+
+**Streaming / platform terms (keep consistent)
+- **stream** (noun), **to stream** (verb), **streamer**
+- **Twitch chat** (two words)
+- **mod** (dialogue/chat), **moderator** (narrative if needed)
+- **clip** (noun/verb), **VOD** (all caps)
+- **overlay**, **slow mode**, **GO LIVE**
+- Counters: **Viewers:** / **Subscribers:** (capitalized with colon)
+- **bits** (keep term; explain once)
+
+**Police/legal language (Finnish system, US English words)**
+- Prefer **interview** when procedural/neutral; use **interrogation** when pressure is emphasized.
+- **pre-trial investigation** once; afterward **the investigation** unless the stage matters.
+- **taken into custody / detained / held** rather than overusing “arrested” if the original tone is bureaucratic.
+
+### B. “Explain once” list (what to gloss at first mention)
+Give a one-phrase, in-line gloss only at first appearance:
+1. **Alepa** — “a neighborhood convenience store chain.”
+2. **Prisma** — “a hypermarket.”
+3. **S-market / K-Market / K-Citymarket** — “Finnish supermarket chain.”
+4. **ratikka** — “the tram.”
+5. **loska** — “snow-and-mud slush.”
+6. **Helsingin Sanomat** — “Finland’s biggest daily.”
+7. **YLE** — “Finland’s public broadcaster.”
+8. **Assembly** — “Finland’s flagship LAN event.”
+9. **Musiikkitalo** — “Helsinki’s concert hall.”
+10. **Alepa beanie** — “a promo beanie with a place-name stitched on it.”
+11. **puolisoturi** — “literally ‘half-soldier,’ a slur.”
+12. **bits** — “Twitch micro-donations.”
+13. **overlay** — “an on-screen sponsor logo.”
+14. **slow mode** — “chat rate limit.”
+
+### C. 10 concrete rules for the translator (en-US)
+1. **Keep Finland in the text:** don’t substitute Finnish brands/institutions with American equivalents; anchor with minimal gloss once.
+2. **Maintain deadpan:** let absurdity land through timing and restraint; don’t add jokes or moral commentary.
+3. **Preserve the multi-channel typography:** chat/logs/headlines remain visually distinct; do not normalize into narrative paragraphs.
+4. **Choose one tech term and stick to it:** stream (not broadcast), clip (not snippet), mod (not admin), VOD (not recording) unless context demands.
+5. **Handles must be exact:** Reakti0n with a zero, NordicTruth88, PaperTrail, CherryKitten; never “correct” them.
+6. **Numbers are narrative beats:** keep viewer/subscriber counters, timestamps, hashes, bitrate/LUFS values intact.
+7. **Swearing by intensity, not literal:** calibrate profanity to scene; avoid teen slang and avoid “cute” substitutes that deflate tension.
+8. **Finnish everyday detail is tone:** coffee, discount stickers, fog, tram squeal, slush, bureaucracy—keep concrete and unromantic.
+9. **Under-explain rather than over-explain:** if the context carries it, let it; avoid footnotes and touristy asides.
+10. **Don’t Americanize legal culture:** no Miranda copy-paste, no DA-speak; keep generic US English with Finnish institutional flavor.
+
+### D. 5 common mistakes to avoid (en-US)
+1. **Euro-English register drift:** overly formal British phrasing (“whilst,” “queue,” “flat”)—stay US standard (“while,” “line,” “apartment/flat depending on context; Helsinki housing can be “apartment” but “studio” often fits).
+2. **Over-explaining Finland:** long cultural lectures break pacing; give a small gloss once and move on.
+3. **Over-straightening the story:** the novel’s power is contradiction (tragedy + marketing, truth + performance); don’t simplify into clean procedural beats.
+4. **Over-dramatizing emotion:** keep the cold, observed style; let shock come from detail and silence, not extra adjectives.
+5. **Inconsistent tech vocabulary:** swapping terms (stream/broadcast/live, clip/snippet, mod/moderator) weakens realism and confuses platform-savvy readers.
