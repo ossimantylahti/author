@@ -332,6 +332,43 @@ def _models_for_initial_request() -> List[str]:
     return candidates
 
 
+def _select_startup_model() -> None:
+    """Resolve the requested model or a fallback before entering the prompt loop.
+
+    models.retrieve() performs an access check without generating tokens. The real
+    request still retains its normal fallback logic in case availability changes
+    after startup or the model rejects the actual Responses API request.
+    """
+    global ACTIVE_MODEL
+
+    last_not_found: Optional[Exception] = None
+    for model_name in _candidate_models():
+        try:
+            client.models.retrieve(model_name)
+            ACTIVE_MODEL = model_name
+            return
+        except NotFoundError as error:
+            last_not_found = error
+
+    raise RuntimeError(
+        "No configured model is accessible during startup model check. "
+        f"Tried: {', '.join(_candidate_models())}. "
+        f"Last error: {last_not_found}"
+    )
+
+
+def _model_selection_status() -> str:
+    """Return a concise human-readable summary of requested vs active model."""
+    if not ACTIVE_MODEL:
+        return "Model selection: NOT VERIFIED"
+    if ACTIVE_MODEL == MODEL:
+        return f"Model selection: OK - using requested model '{ACTIVE_MODEL}'."
+    return (
+        f"Model selection: FALLBACK - requested model '{MODEL}' is unavailable; "
+        f"using '{ACTIVE_MODEL}'."
+    )
+
+
 def _supports_explicit_cache(model_name: str) -> bool:
     """Explicit breakpoints and prompt_cache_options are supported by GPT-5.6+ models."""
     return model_name.startswith(("gpt-5.6", "gpt-6"))
@@ -741,6 +778,12 @@ def main() -> None:
         f"python-docx {PYTHON_DOCX_VERSION}."
     )
     print(f"Requested model: {MODEL}")
+    try:
+        _select_startup_model()
+    except RuntimeError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        sys.exit(1)
+    print(_model_selection_status())
     print("Loading input files:")
     for path in paths:
         print(f"  - {path}")
@@ -758,8 +801,9 @@ def main() -> None:
     print(f"Combined manuscript payload length: {len(book_text)} characters.")
     print(f"Stable cache prefix length: {len(static_material)} characters.")
     print(f"Local prompt_cache_key: {cache_key}")
+    cache_model = ACTIVE_MODEL or MODEL
     print(
-        f"{MODEL} uses the configured prompt-cache path when supported "
+        f"{cache_model} uses the configured prompt-cache path when supported "
         f"(explicit-cache minimum TTL {PROMPT_CACHE_TTL})."
     )
     print(
