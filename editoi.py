@@ -121,15 +121,19 @@ _verify_openai_sdk(OpenAI)
 OPENAI_SDK_VERSION = _distribution_version("openai")
 PYTHON_DOCX_VERSION = _distribution_version("python-docx")
 
-# Preferred model. Can be overridden with OPENAI_MODEL, for example:
-#   OPENAI_MODEL=gpt-6-astra python3 editoi.py manuscript.docx
-# Default remains GPT-5.6 for predictable cost and availability.
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
+# Default model. Precedence is:
+#   1) --model=MODEL / --model MODEL
+#   2) OPENAI_MODEL environment variable
+#   3) DEFAULT_MODEL
+DEFAULT_MODEL = "gpt-5.6-sol"
+MODEL = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
 
-# Ordered fallbacks. Model availability is tested lazily with the real request,
-# so the script no longer spends a separate API call on model probing.
+# Ordered fallbacks. The explicitly/default requested MODEL is always tried first.
+# If it is unavailable, these are tried in order (duplicates are removed).
+# Astra is intentionally not an automatic fallback from Sol because it is a
+# substantially more expensive model; select it explicitly with --model=gpt-6-astra.
 MODEL_FALLBACKS = [
-    "gpt-6-astra",
+    "gpt-5.6-sol",
     "gpt-5.6",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
@@ -460,7 +464,17 @@ def _create_initial_response(
     global ACTIVE_MODEL
 
     last_not_found: Optional[Exception] = None
-    for model_name in _models_for_initial_request():
+    models_to_try = _models_for_initial_request()
+    first_model_to_try = models_to_try[0]
+
+    if ACTIVE_MODEL and ACTIVE_MODEL != MODEL and first_model_to_try == ACTIVE_MODEL:
+        print(
+            f"[NOTICE] Requested model '{MODEL}' was unavailable earlier; "
+            f"using fallback '{ACTIVE_MODEL}'.",
+            flush=True,
+        )
+
+    for model_name in models_to_try:
         print(f"[DEBUG] Trying model for real request: '{model_name}'...", flush=True)
 
         request_args: Dict[str, Any] = {
@@ -475,6 +489,12 @@ def _create_initial_response(
         try:
             response = client.responses.create(**request_args)
             ACTIVE_MODEL = model_name
+            if model_name != MODEL:
+                print(
+                    f"[WARNING] Requested model '{MODEL}' is unavailable. "
+                    f"Falling back to '{model_name}'.",
+                    flush=True,
+                )
             print(f"[DEBUG] Active model: '{ACTIVE_MODEL}'", flush=True)
             return response
         except NotFoundError as error:
@@ -643,13 +663,53 @@ def ask_question(
     return full_answer, last_response_id
 
 
-def _usage_exit() -> None:
-    print("Usage: python3 editoi.py FILE1 [FILE2 ... FILE10]")
+def _usage_exit(exit_code: int = 1) -> None:
+    print("Usage: python3 editoi.py [--model=MODEL] FILE1 [FILE2 ... FILE10]")
+    print("       python3 editoi.py [--model MODEL] FILE1 [FILE2 ... FILE10]")
     print("Examples:")
     print("  python3 editoi.py manuscript.docx")
-    print("  python3 editoi.py mts.txt staccato.json")
-    print("  python3 editoi.py Edit2.docx staccato.csv notes.txt")
-    sys.exit(1)
+    print("  python3 editoi.py --model=gpt-6-astra manuscript.docx")
+    print("  python3 editoi.py --model gpt-5.6-terra mts.txt staccato.json")
+    print(f"Default model: {DEFAULT_MODEL}")
+    print("OPENAI_MODEL can also set the model; --model takes precedence.")
+    sys.exit(exit_code)
+
+
+def _parse_cli_args(args: List[str]) -> Tuple[str, List[str]]:
+    """Parse --model while leaving positional arguments as input file paths."""
+    requested_model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+    paths: List[str] = []
+    index = 0
+
+    while index < len(args):
+        arg = args[index]
+
+        if arg in ("-h", "--help"):
+            _usage_exit(0)
+
+        if arg == "--model":
+            index += 1
+            if index >= len(args) or not args[index].strip():
+                print("Error: --model requires a model name.", file=sys.stderr)
+                _usage_exit(2)
+            requested_model = args[index].strip()
+        elif arg.startswith("--model="):
+            requested_model = arg.split("=", 1)[1].strip()
+            if not requested_model:
+                print("Error: --model= requires a model name.", file=sys.stderr)
+                _usage_exit(2)
+        elif arg.startswith("--"):
+            print(f"Error: Unknown option: {arg}", file=sys.stderr)
+            _usage_exit(2)
+        else:
+            paths.append(arg)
+
+        index += 1
+
+    if not paths:
+        _usage_exit()
+
+    return requested_model, paths
 
 
 def _print_command_help() -> None:
@@ -663,10 +723,10 @@ def _print_command_help() -> None:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        _usage_exit()
+    global MODEL
 
-    paths = sys.argv[1:]
+    MODEL, paths = _parse_cli_args(sys.argv[1:])
+
     if len(paths) > MAX_INPUT_FILES:
         print(f"Error: Too many files. Max is {MAX_INPUT_FILES}, got {len(paths)}.")
         sys.exit(1)
@@ -680,6 +740,7 @@ def main() -> None:
         f"Dependencies OK: openai {OPENAI_SDK_VERSION}, "
         f"python-docx {PYTHON_DOCX_VERSION}."
     )
+    print(f"Requested model: {MODEL}")
     print("Loading input files:")
     for path in paths:
         print(f"  - {path}")
@@ -720,7 +781,11 @@ def main() -> None:
                 continue
 
             if raw_question == "/status":
-                print(f"Active model: {ACTIVE_MODEL or '(selected on first real request)'}")
+                print(f"Requested model: {MODEL}")
+                active_text = ACTIVE_MODEL or "(selected on first real request)"
+                if ACTIVE_MODEL and ACTIVE_MODEL != MODEL:
+                    active_text += " (fallback)"
+                print(f"Active model: {active_text}")
                 print(f"OpenAI SDK: {OPENAI_SDK_VERSION}")
                 print(f"python-docx: {PYTHON_DOCX_VERSION}")
                 print(f"Prompt cache key: {cache_key}")
