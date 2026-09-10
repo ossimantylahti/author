@@ -121,12 +121,16 @@ _verify_openai_sdk(OpenAI)
 OPENAI_SDK_VERSION = _distribution_version("openai")
 PYTHON_DOCX_VERSION = _distribution_version("python-docx")
 
-# Preferred model. GPT-5.6 explicit prompt caching is used when available.
-MODEL = "gpt-5.6"
+# Preferred model. Can be overridden with OPENAI_MODEL, for example:
+#   OPENAI_MODEL=gpt-6-astra python3 editoi.py manuscript.docx
+# Default remains GPT-5.6 for predictable cost and availability.
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
 
 # Ordered fallbacks. Model availability is tested lazily with the real request,
 # so the script no longer spends a separate API call on model probing.
 MODEL_FALLBACKS = [
+    "gpt-6-astra",
+    "gpt-5.6",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
     "gpt-5.5",
@@ -325,8 +329,8 @@ def _models_for_initial_request() -> List[str]:
 
 
 def _supports_explicit_cache(model_name: str) -> bool:
-    """Explicit breakpoints and prompt_cache_options are GPT-5.6+ features."""
-    return model_name.startswith("gpt-5.6")
+    """Explicit breakpoints and prompt_cache_options are supported by GPT-5.6+ models."""
+    return model_name.startswith(("gpt-5.6", "gpt-6"))
 
 
 def _supports_legacy_extended_cache(model_name: str) -> bool:
@@ -694,8 +698,8 @@ def main() -> None:
     print(f"Stable cache prefix length: {len(static_material)} characters.")
     print(f"Local prompt_cache_key: {cache_key}")
     print(
-        "GPT-5.6 uses an explicit cache breakpoint after all input files "
-        f"with minimum TTL {PROMPT_CACHE_TTL}."
+        f"{MODEL} uses the configured prompt-cache path when supported "
+        f"(explicit-cache minimum TTL {PROMPT_CACHE_TTL})."
     )
     print(
         "Each ordinary prompt starts a fresh analysis, so previous analyses do not "
