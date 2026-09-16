@@ -3,6 +3,7 @@
 
 Examples:
     python3 litteroi.py interview.mp3
+    python3 litteroi.py "https://www.youtube.com/watch?v=VIDEO_ID"
     python3 litteroi.py interview.mp3 /start=30 /stop=95
     python3 litteroi.py interview.mp3 --start 30 --stop 95
     python3 litteroi.py interview.mp3 --srt
@@ -18,13 +19,16 @@ Notes:
 """
 
 import argparse
+import contextlib
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from openai import OpenAI
 
@@ -88,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Transcribe an MP3 file and print only the recognised speech."
     )
-    parser.add_argument("file", help="Input audio file (.mp3)")
+    parser.add_argument("file", help="Input MP3 file or YouTube URL")
     parser.add_argument("--start", type=float, default=None, help="Start time in seconds")
     parser.add_argument("--stop", type=float, default=None, help="Stop time in seconds")
     parser.add_argument(
@@ -193,6 +197,66 @@ def validate_args(
         raise ValueError("--max-file-mb must be greater than 0.")
     if chunk_seconds <= 0:
         raise ValueError("--chunk-seconds must be greater than 0.")
+
+
+def is_youtube_url(value: str) -> bool:
+    """Return whether value is a supported YouTube video URL."""
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    return parsed.scheme in {"http", "https"} and (
+        hostname == "youtu.be"
+        or hostname == "youtube.com"
+        or hostname.endswith(".youtube.com")
+    )
+
+
+def safe_filename(value: str, fallback: str = "youtube_audio") -> str:
+    """Make an externally supplied title safe for use as a local filename."""
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value).strip(" .")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned[:180].rstrip(" .") or fallback
+
+
+def download_youtube_audio(youtube_url: str, temp_dir: str) -> tuple[str, str]:
+    """Download only YouTube audio as MP3 and return its path and video title."""
+    if not ffmpeg_available():
+        raise RuntimeError(
+            "ffmpeg is required for downloading and converting YouTube audio."
+        )
+
+    output_path = os.path.join(temp_dir, "youtube_audio.mp3")
+    cmd = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--no-playlist",
+        "--print",
+        "%(title)s",
+        "-x",
+        "--audio-format",
+        "mp3",
+        "-o",
+        output_path,
+        youtube_url,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip()
+        if "No module named yt_dlp" in details:
+            raise RuntimeError(
+                "yt-dlp is not installed. Install dependencies with: "
+                "python -m pip install -r requirements.txt"
+            )
+        raise RuntimeError(f"YouTube audio download failed: {details}")
+    if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+        raise RuntimeError("YouTube audio download did not produce a usable MP3 file.")
+
+    title_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    title = title_lines[-1] if title_lines else "youtube_audio"
+    return output_path, safe_filename(title)
 
 
 def ffmpeg_available() -> bool:
@@ -636,19 +700,34 @@ def build_srt(
     return "\n\n".join(blocks).strip()
 
 
-def main() -> None:
-    try:
-        args = parse_args()
-        if args.speaker_count <= 0:
-            raise ValueError("--speaker-count must be greater than 0.")
-        if args.context_chars < 0:
-            raise ValueError("--context-chars must be 0 or greater.")
+def run(args: argparse.Namespace) -> None:
+    """Run one transcription, cleaning up only files created by this process."""
+    if args.speaker_count <= 0:
+        raise ValueError("--speaker-count must be greater than 0.")
+    if args.context_chars < 0:
+        raise ValueError("--context-chars must be 0 or greater.")
+
+    youtube_input = is_youtube_url(args.file)
+    with contextlib.ExitStack() as cleanup:
+        if youtube_input:
+            youtube_temp = cleanup.enter_context(
+                tempfile.TemporaryDirectory(prefix="litteroi_youtube_")
+            )
+            source_path, video_title = download_youtube_audio(args.file, youtube_temp)
+            output_source_path = os.path.join(os.getcwd(), f"{video_title}.mp3")
+        else:
+            source_path = args.file
+            output_source_path = args.file
+
         validate_args(
-            args.file, args.start, args.stop, args.diarize, args.model, args.max_file_mb, args.chunk_seconds
+            source_path, args.start, args.stop, args.diarize, args.model,
+            args.max_file_mb, args.chunk_seconds
         )
 
         actual_model = choose_model(args.diarize, args.model)
-        path_to_send = build_trimmed_mp3(args.file, args.start, args.stop)
+        path_to_send = build_trimmed_mp3(source_path, args.start, args.stop)
+        if path_to_send != source_path:
+            cleanup.callback(shutil.rmtree, os.path.dirname(path_to_send), True)
         file_size_bytes = os.path.getsize(path_to_send)
         file_size_mb = file_size_bytes / (1024 * 1024)
         size_limit_bytes = int(args.max_file_mb * 1024 * 1024)
@@ -689,7 +768,7 @@ def main() -> None:
                 actual_model,
                 args.language,
                 args.diarize,
-                args.srt,
+                args.srt or youtube_input,
                 prompt=None,
             )
             texts.append(extract_text(response))
@@ -732,12 +811,13 @@ def main() -> None:
                             actual_model,
                             args.language,
                             args.diarize,
-                            args.srt,
+                            args.srt or youtube_input,
                             prompt=context_prompt,
                         )
                     except Exception as exc:
                         raise RuntimeError(
-                            f"Transcription failed for chunk {chunk.index}/{chunk.total}: {chunk.path}"
+                            f"Transcription failed for chunk {chunk.index}/{chunk.total} "
+                            f"({chunk.path}): {exc}"
                         ) from exc
                     texts.append(extract_text(response))
                     chunk_segments = extract_segments(response)
@@ -760,23 +840,28 @@ def main() -> None:
         else:
             transcript = build_plain_text(text)
 
-        output_txt = get_output_txt_path(args.file, args.start, args.stop)
+        output_txt = get_output_txt_path(output_source_path, args.start, args.stop)
         print("Starting transcript merge and write.", file=sys.stderr)
         write_text_file(output_txt, transcript)
         print(transcript)
 
         print(f"\nSaved transcript to: {output_txt}", file=sys.stderr)
 
-        if args.srt:
+        if args.srt or youtube_input:
             if not segments:
                 raise RuntimeError(
                     "The API response did not contain timestamped segments, so .srt could not be generated."
                 )
-            output_srt = get_output_srt_path(args.file, args.start, args.stop)
+            output_srt = get_output_srt_path(output_source_path, args.start, args.stop)
             srt_content = build_srt(segments, speaker_map, include_speakers=args.diarize)
             write_text_file(output_srt, srt_content)
             print(f"Saved subtitles to: {output_srt}", file=sys.stderr)
         print("Merging complete.", file=sys.stderr)
+
+
+def main() -> None:
+    try:
+        run(parse_args())
 
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)

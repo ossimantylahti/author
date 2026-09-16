@@ -1,3 +1,4 @@
 openai
 python-docx
 requests
+yt-dlp
