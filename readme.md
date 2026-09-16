@@ -22,12 +22,24 @@ promptiin pitäisi ilmestyä (venv)
 Asenna riippuvuudet venviin
 
 python -m pip install --upgrade pip
-python -m pip install python-docx openai
+python -m pip install python-docx openai yt-dlp
 python -m pip install --upgrade openai
 sudo apt install -y dos2unix
 
 varmista:
 python -c "import docx; import openai; print('ok')"
+
+YouTube-videon voi litteroida suoraan URL:stä (myös pitkät videot pilkotaan
+automaattisesti). Komento tallentaa videon nimellä sekä litteroinnin `.txt`-muodossa
+että aikaleimallisen `.srt`-tekstityksen nykyiseen hakemistoon:
+
+```bash
+python litteroi.py "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+Toiminto tarvitsee `yt-dlp`-paketin sekä järjestelmään asennetut `ffmpeg`- ja
+`ffprobe`-komennot. Python-riippuvuudet voi asentaa myös komennolla
+`python -m pip install -r requirements.txt`.
 
 Aseta OpenAI API -avain ympäristömuuttujaan
 Lisää rivi ~/.bashrc-tiedoston loppuun:
