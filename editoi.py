@@ -6,6 +6,7 @@ import inspect
 import os
 import shlex
 import sys
+import zipfile
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -13,6 +14,25 @@ REQUIRED_PACKAGES = (
     ("openai", "openai"),
     ("python-docx", "docx"),
 )
+
+# DOCX is a ZIP-based OOXML package. Legacy .doc files and encrypted/protected
+# Office documents use the OLE Compound File container instead.
+OLE_COMPOUND_FILE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+OLE_DIAGNOSTIC_MARKERS = (
+    "DRMEncryptedDataSpace",
+    "StrongEncryptionDataSpace",
+    "EncryptedPackage",
+    "EncryptionInfo",
+    "WordDocument",
+    "0Table",
+    "1Table",
+    "MSIP_Label_",
+    "Microsoft.InformationProtection",
+)
+
+
+class InputFileFormatError(RuntimeError):
+    """Raised when an input file exists but is not usable in its claimed format."""
 
 
 def _pip_install_command() -> str:
@@ -206,6 +226,136 @@ client = _create_openai_client()
 ACTIVE_MODEL: Optional[str] = None
 
 
+def _scan_binary_markers(path: str, markers: Tuple[str, ...]) -> List[str]:
+    """Find ASCII or UTF-16LE marker strings without loading the whole file."""
+    encoded: Dict[str, Tuple[bytes, bytes]] = {
+        marker: (marker.encode("ascii"), marker.encode("utf-16le"))
+        for marker in markers
+    }
+    max_marker_bytes = max(
+        len(candidate)
+        for candidates in encoded.values()
+        for candidate in candidates
+    )
+    overlap = max_marker_bytes - 1
+    remaining = set(markers)
+    found: List[str] = []
+    tail = b""
+
+    with open(path, "rb") as file_handle:
+        while remaining:
+            chunk = file_handle.read(1024 * 1024)
+            if not chunk:
+                break
+
+            data = tail + chunk
+            for marker in list(remaining):
+                if any(candidate in data for candidate in encoded[marker]):
+                    found.append(marker)
+                    remaining.remove(marker)
+
+            if overlap:
+                tail = data[-overlap:]
+
+    return found
+
+
+def _diagnose_non_zip_docx(path: str) -> str:
+    """Explain why a .docx file is not a normal ZIP-based OOXML package."""
+    with open(path, "rb") as file_handle:
+        signature = file_handle.read(len(OLE_COMPOUND_FILE_SIGNATURE))
+
+    if signature != OLE_COMPOUND_FILE_SIGNATURE:
+        return (
+            f"Tiedosto '{path}' ei ole kelvollinen DOCX/OOXML-paketti. "
+            "DOCX-tiedoston pitää olla ZIP-pohjainen OOXML-tiedosto. "
+            "Tiedosto voi olla vioittunut tai sen tiedostopääte voi olla väärä."
+        )
+
+    markers = set(_scan_binary_markers(path, OLE_DIAGNOSTIC_MARKERS))
+
+    if (
+        "DRMEncryptedDataSpace" in markers
+        or "MSIP_Label_" in markers
+        or "Microsoft.InformationProtection" in markers
+    ):
+        return (
+            f"Tiedosto '{path}' on Microsoft Rights Management (IRM) -suojattu "
+            "Office-tiedosto. Tällainen suojaus syntyy esimerkiksi silloin, kun "
+            "Word-dokumenttiin on liitetty salaava Microsoft Purview sensitivity "
+            "label. python-docx ei pysty avaamaan salattua sisältöä. Poista Wordissa "
+            "Sensitivity/Protection-suojaus ja tallenna tiedosto uudelleen tavallisena "
+            ".docx-tiedostona."
+        )
+
+    if "StrongEncryptionDataSpace" in markers or "EncryptionInfo" in markers:
+        return (
+            f"Tiedosto '{path}' on salattu Office-dokumentti, esimerkiksi "
+            "salasanalla suojattu DOCX. python-docx ei pysty avaamaan salattua "
+            "pakettia. Poista Wordissa salaus/salasanasuojaus ja tallenna tiedosto "
+            "uudelleen tavallisena .docx-tiedostona."
+        )
+
+    if "WordDocument" in markers or "0Table" in markers or "1Table" in markers:
+        return (
+            f"Tiedosto '{path}' näyttää vanhan Word 97-2003 -muodon .doc-tiedostolta, "
+            "vaikka sen nimi päättyy .docx. editoi.py tukee Word-tiedostoista vain "
+            "nykyistä .docx-muotoa. Avaa tiedosto Wordissa ja tallenna se muodossa "
+            "'Word Document (*.docx)'."
+        )
+
+    if "EncryptedPackage" in markers:
+        return (
+            f"Tiedosto '{path}' sisältää salatun Office-paketin. Se voi olla "
+            "Rights Management / sensitivity label -suojattu tai muuten salattu "
+            "DOCX. python-docx ei voi avata sitä ennen suojauksen poistamista. "
+            "Poista Wordissa Sensitivity/Protection tai muu salaus ja tallenna "
+            "tiedosto uudelleen tavallisena .docx-tiedostona."
+        )
+
+    return (
+        f"Tiedosto '{path}' on OLE Compound File eikä tavallinen ZIP-pohjainen "
+        "DOCX. Se voi olla vanha .doc-tiedosto tai suojattu/salattu Office-dokumentti. "
+        "Avaa tiedosto Wordissa, poista mahdollinen Sensitivity/Protection-suojaus "
+        "ja tallenna se uudelleen muodossa 'Word Document (*.docx)'."
+    )
+
+
+def _validate_docx_package(path: str) -> None:
+    """Reject unsupported, encrypted, mislabeled, or malformed DOCX inputs early."""
+    if not zipfile.is_zipfile(path):
+        raise InputFileFormatError(_diagnose_non_zip_docx(path))
+
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            members = set(archive.namelist())
+    except (OSError, zipfile.BadZipFile) as error:
+        raise InputFileFormatError(
+            f"Tiedosto '{path}' näyttää ZIP-paketilta, mutta sitä ei voi lukea "
+            f"luotettavasti ({error.__class__.__name__}: {error}). "
+            "Tiedosto voi olla vioittunut."
+        ) from error
+
+    if "[Content_Types].xml" not in members:
+        raise InputFileFormatError(
+            f"Tiedosto '{path}' on ZIP-tiedosto, mutta ei kelvollinen Office "
+            "Open XML -paketti: [Content_Types].xml puuttuu."
+        )
+
+    if "word/document.xml" not in members:
+        if any(member.startswith("xl/") for member in members):
+            detected = "Excel-työkirjalta"
+        elif any(member.startswith("ppt/") for member in members):
+            detected = "PowerPoint-esitykseltä"
+        else:
+            detected = "muulta OOXML-paketilta"
+
+        raise InputFileFormatError(
+            f"Tiedosto '{path}' ei sisällä Word-dokumentin word/document.xml-osaa "
+            f"ja näyttää {detected}. editoi.py tarvitsee Word-tiedostoksi aidon .docx:n."
+        )
+
+
 def _style_name_and_id(paragraph) -> Tuple[str, str]:
     """Return a paragraph's style name and style id defensively."""
     style = getattr(paragraph, "style", None)
@@ -234,7 +384,17 @@ def load_docx_as_text(path: str) -> str:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
 
-    doc = Document(path)
+    _validate_docx_package(path)
+
+    try:
+        doc = Document(path)
+    except Exception as error:
+        raise InputFileFormatError(
+            f"Tiedosto '{path}' näyttää rakenteeltaan DOCX-paketilta, mutta "
+            "python-docx ei saanut sitä avattua. Tiedosto voi olla vioittunut tai "
+            "sisältää rakenteen, jota python-docx ei tue. "
+            f"Taustavirhe: {error.__class__.__name__}: {error}"
+        ) from error
     paragraphs: List[str] = []
     heading_1_count = 0
     heading_2_count = 0
@@ -271,6 +431,12 @@ def load_manuscript(path: str) -> str:
     _, extension = os.path.splitext(path.lower())
     if extension == ".docx":
         return load_docx_as_text(path)
+    if extension == ".doc":
+        raise InputFileFormatError(
+            f"Tiedosto '{path}' käyttää vanhaa Word 97-2003 .doc -muotoa. "
+            "editoi.py tukee Word-tiedostoista vain .docx-muotoa. "
+            "Avaa tiedosto Wordissa ja tallenna se muodossa 'Word Document (*.docx)'."
+        )
     return load_text_file(path)
 
 
@@ -790,8 +956,14 @@ def main() -> None:
 
     try:
         book_text = build_multi_file_payload(paths)
+    except InputFileFormatError as error:
+        print(f"Error loading files:\n{error}", file=sys.stderr)
+        sys.exit(1)
     except Exception as error:
-        print(f"Error loading files: {error}")
+        print(
+            f"Error loading files: {error.__class__.__name__}: {error}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     static_material = build_static_material(book_text)
