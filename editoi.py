@@ -414,6 +414,22 @@ def load_docx_as_text(path: str) -> str:
         else:
             paragraphs.append(text)
 
+    missing_heading_levels: List[str] = []
+    if heading_1_count == 0:
+        missing_heading_levels.append("Heading 1 / Otsikko 1")
+    if heading_2_count == 0:
+        missing_heading_levels.append("Heading 2 / Otsikko 2")
+
+    if missing_heading_levels:
+        missing_text = " ja ".join(missing_heading_levels)
+        print(
+            f"WARNING: Tiedostosta '{path}' ei löytynyt lainkaan tyylejä: "
+            f"{missing_text}. editoi.py odottaa Word-dokumentilta sekä Heading 1- "
+            "että Heading 2 -rakennetta. Tiedosto ladataan silti, mutta osioiden "
+            "ja lukujen tunnistus voi jäädä puutteelliseksi.",
+            file=sys.stderr,
+        )
+
     return "\n\n".join(paragraphs)
 
 
