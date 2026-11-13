@@ -145,17 +145,30 @@ Mallin voi valita kolmella tavalla. Etusijajärjestys on:
 2. ympäristömuuttuja `OPENAI_MODEL`;
 3. koodin oletus `gpt-5.6-sol`.
 
-Esimerkiksi Astra 6.1 tai 6.2:
+**Tällä hetkellä dokumentoitu Astra-malli on `gpt-6-astra`.**
+OpenAI:n malliluettelossa on 13.11.2026 myös `gpt-6.1-sol` ja
+`gpt-6.1-terra`, mutta ei `gpt-6.1-astra`- tai `gpt-6.2-astra`-malleja.
+Versioituja Astra-tunnuksia ei siis voi vielä käyttää API:ssa.
+
+```bash
+python3 editoi.py --model=gpt-6-astra manuscript.docx
+python3 editoi.py --model=gpt-6.1-sol manuscript.docx
+```
+
+`gpt-6.1-astra` ja `gpt-6.2-astra` ovat **ennakoivia valintoja**, eivät
+vahvistettuja OpenAI-mallitunnuksia. Ne voi edelleen antaa
+`--model`-parametrilla, jos OpenAI myöhemmin julkaisee juuri nämä tunnukset.
 
 ```bash
 python3 editoi.py --model=gpt-6.1-astra manuscript.docx
 python3 editoi.py --model=gpt-6.2-astra manuscript.docx
 ```
 
-Mallitunnus välitetään OpenAI API:lle sellaisenaan. Astra 6.1:n ja 6.2:n
-käyttö onnistuu vasta, kun kyseinen tunnus on API:ssa saatavilla ja
-API-avaimella on siihen käyttöoikeus. Skripti tarkistaa saatavuuden
-käynnistyksessä ja käyttää tarvittaessa tavallista fallback-listaa.
+Skripti tarkistaa mallin saatavuuden `models.retrieve()`-kutsulla.
+Jos API palauttaa `NotFound`-virheen (mallitunnusta ei löydy tai
+avaimella ei ole käyttöoikeutta), ohjelma kertoo syyn ja siirtyy
+tavalliseen fallback-listaan. Astra ei ole automaattinen fallback.
+Ajantasaiset mallitunnukset: https://developers.openai.com/api/docs/models
 
 Voit myös avata interaktiivisen mallivalitsimen:
 
@@ -164,7 +177,8 @@ python3 editoi.py --select-model manuscript.docx
 ```
 
 Valitsimessa ovat nykyinen määritelty malli, `gpt-5.6-sol`,
-`gpt-6-astra`, `gpt-6.1-astra` ja `gpt-6.2-astra`.
+`gpt-6-astra` sekä ennakoivat `gpt-6.1-astra` ja `gpt-6.2-astra`.
+Julkaisemattomat Astra-versiot on merkitty valikkoon erikseen.
 Enter säilyttää nykyisen mallin. `--select-model` on valinnainen,
 eikä valikko avaudu normaalisti.
 
