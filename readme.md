@@ -145,13 +145,30 @@ Mallin voi valita kolmella tavalla. Etusijajärjestys on:
 2. ympäristömuuttuja `OPENAI_MODEL`;
 3. koodin oletus `gpt-5.6-sol`.
 
-Esimerkiksi:
+Esimerkiksi Astra 6.1 tai 6.2:
 
 ```bash
-python3 editoi.py --model=gpt-6-astra manuscript.docx
+python3 editoi.py --model=gpt-6.1-astra manuscript.docx
+python3 editoi.py --model=gpt-6.2-astra manuscript.docx
 ```
 
-tai:
+Mallitunnus välitetään OpenAI API:lle sellaisenaan. Astra 6.1:n ja 6.2:n
+käyttö onnistuu vasta, kun kyseinen tunnus on API:ssa saatavilla ja
+API-avaimella on siihen käyttöoikeus. Skripti tarkistaa saatavuuden
+käynnistyksessä ja käyttää tarvittaessa tavallista fallback-listaa.
+
+Voit myös avata interaktiivisen mallivalitsimen:
+
+```bash
+python3 editoi.py --select-model manuscript.docx
+```
+
+Valitsimessa ovat nykyinen määritelty malli, `gpt-5.6-sol`,
+`gpt-6-astra`, `gpt-6.1-astra` ja `gpt-6.2-astra`.
+Enter säilyttää nykyisen mallin. `--select-model` on valinnainen,
+eikä valikko avaudu normaalisti.
+
+Myös mikä tahansa muu API-mallitunnus voidaan edelleen antaa suoraan:
 
 ```bash
 python3 editoi.py --model gpt-5.6-terra manuscript.docx
@@ -170,7 +187,7 @@ gpt-5.2
 gpt-4
 ```
 
-`gpt-6-astra` ei ole automaattinen fallback, koska se on tarkoituksella jätetty vain eksplisiittisesti valittavaksi.
+Astra-mallit (`gpt-6-astra`, `gpt-6.1-astra` ja `gpt-6.2-astra`) eivät ole automaattisia fallback-malleja, vaan ne valitaan eksplisiittisesti `--model`- tai `--select-model`-valinnalla.
 
 ## Interaktiiviset komennot
 
