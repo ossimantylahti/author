@@ -148,14 +148,18 @@ PYTHON_DOCX_VERSION = _distribution_version("python-docx")
 DEFAULT_MODEL = "gpt-5.6-sol"
 MODEL = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
 
-# Opt-in models offered by --select-model. These IDs are sent to the API
-# unchanged, so future Astra versions become usable when access is granted.
+# These two speculative IDs are not published API model names as of 2026-11-13.
+# They remain opt-in placeholders so that future releases can be selected if
+# OpenAI actually publishes these IDs and grants access to the API key.
+PREVIEW_ASTRA_MODELS = (
+    "gpt-6.1-astra",
+    "gpt-6.2-astra",
+)
 # Keep expensive Astra variants out of MODEL_FALLBACKS.
 SELECTABLE_MODELS = (
     DEFAULT_MODEL,
     "gpt-6-astra",
-    "gpt-6.1-astra",
-    "gpt-6.2-astra",
+    *PREVIEW_ASTRA_MODELS,
 )
 
 # Ordered fallbacks. The explicitly/default requested MODEL is always tried first.
@@ -542,6 +546,20 @@ def _select_startup_model() -> None:
             return
         except NotFoundError as error:
             last_not_found = error
+            if model_name == MODEL:
+                print(
+                    f"[WARNING] OpenAI API returned NotFound for requested model "
+                    f"'{MODEL}'. The model ID may not exist or the API key may "
+                    f"lack access.",
+                    flush=True,
+                )
+                if MODEL in PREVIEW_ASTRA_MODELS:
+                    print(
+                        "[NOTICE] This Astra version is a future-model placeholder, "
+                        "not a documented API model ID as of 2026-11-13. "
+                        "The documented Astra API model is 'gpt-6-astra'.",
+                        flush=True,
+                    )
 
     raise RuntimeError(
         "No configured model is accessible during startup model check. "
@@ -899,7 +917,8 @@ def _choose_model(configured_model: str) -> str:
     print("Valitse malli (Enter säilyttää nykyisen valinnan):")
     for number, name in enumerate(options, start=1):
         current = " (nykyinen)" if name == configured_model else ""
-        print(f"  {number}. {name}{current}")
+        preview = " (ei julkaistu API:ssa 13.11.2026)" if name in PREVIEW_ASTRA_MODELS else ""
+        print(f"  {number}. {name}{current}{preview}")
 
     while True:
         try:
@@ -926,6 +945,7 @@ def _usage_exit(exit_code: int = 1) -> None:
     print("  python3 editoi.py --model gpt-5.6-terra mts.txt staccato.json")
     print(f"Default model: {DEFAULT_MODEL}")
     print(f"Picker models: {', '.join(SELECTABLE_MODELS)}")
+    print("GPT-6.1/6.2 Astra IDs are speculative placeholders, not published API IDs.")
     print("OPENAI_MODEL can also set the model; --model takes precedence.")
     sys.exit(exit_code)
 
