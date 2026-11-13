@@ -148,10 +148,21 @@ PYTHON_DOCX_VERSION = _distribution_version("python-docx")
 DEFAULT_MODEL = "gpt-5.6-sol"
 MODEL = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
 
+# Opt-in models offered by --select-model. These IDs are sent to the API
+# unchanged, so future Astra versions become usable when access is granted.
+# Keep expensive Astra variants out of MODEL_FALLBACKS.
+SELECTABLE_MODELS = (
+    DEFAULT_MODEL,
+    "gpt-6-astra",
+    "gpt-6.1-astra",
+    "gpt-6.2-astra",
+)
+
 # Ordered fallbacks. The explicitly/default requested MODEL is always tried first.
 # If it is unavailable, these are tried in order (duplicates are removed).
 # Astra is intentionally not an automatic fallback from Sol because it is a
-# substantially more expensive model; select it explicitly with --model=gpt-6-astra.
+# substantially more expensive model; select it explicitly with --model
+# or the optional --select-model picker.
 MODEL_FALLBACKS = [
     "gpt-5.6-sol",
     "gpt-5.6",
@@ -882,22 +893,48 @@ def ask_question(
     return full_answer, last_response_id
 
 
+def _choose_model(configured_model: str) -> str:
+    """Prompt for an optional model; Enter retains the configured default."""
+    options = list(dict.fromkeys((configured_model, *SELECTABLE_MODELS)))
+    print("Valitse malli (Enter säilyttää nykyisen valinnan):")
+    for number, name in enumerate(options, start=1):
+        current = " (nykyinen)" if name == configured_model else ""
+        print(f"  {number}. {name}{current}")
+
+    while True:
+        try:
+            answer = input("Mallin numero> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nMallin valinta keskeytettiin.", file=sys.stderr)
+            sys.exit(2)
+
+        if not answer:
+            return configured_model
+        if answer.isdecimal() and 1 <= int(answer) <= len(options):
+            return options[int(answer) - 1]
+        print(f"Virhe: valitse numero 1–{len(options)} tai paina Enter.")
+
+
 def _usage_exit(exit_code: int = 1) -> None:
-    print("Usage: python3 editoi.py [--model=MODEL] FILE1 [FILE2 ... FILE10]")
+    print("Usage: python3 editoi.py [--model=MODEL | --select-model] FILE1 [FILE2 ... FILE10]")
     print("       python3 editoi.py [--model MODEL] FILE1 [FILE2 ... FILE10]")
     print("Examples:")
     print("  python3 editoi.py manuscript.docx")
-    print("  python3 editoi.py --model=gpt-6-astra manuscript.docx")
+    print("  python3 editoi.py --select-model manuscript.docx")
+    print("  python3 editoi.py --model=gpt-6.1-astra manuscript.docx")
+    print("  python3 editoi.py --model=gpt-6.2-astra manuscript.docx")
     print("  python3 editoi.py --model gpt-5.6-terra mts.txt staccato.json")
     print(f"Default model: {DEFAULT_MODEL}")
+    print(f"Picker models: {', '.join(SELECTABLE_MODELS)}")
     print("OPENAI_MODEL can also set the model; --model takes precedence.")
     sys.exit(exit_code)
 
 
 def _parse_cli_args(args: List[str]) -> Tuple[str, List[str]]:
-    """Parse --model while leaving positional arguments as input file paths."""
+    """Parse model options while leaving positional arguments as file paths."""
     requested_model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     paths: List[str] = []
+    choose_model = False
     index = 0
 
     while index < len(args):
@@ -906,7 +943,9 @@ def _parse_cli_args(args: List[str]) -> Tuple[str, List[str]]:
         if arg in ("-h", "--help"):
             _usage_exit(0)
 
-        if arg == "--model":
+        if arg == "--select-model":
+            choose_model = True
+        elif arg == "--model":
             index += 1
             if index >= len(args) or not args[index].strip():
                 print("Error: --model requires a model name.", file=sys.stderr)
@@ -927,6 +966,9 @@ def _parse_cli_args(args: List[str]) -> Tuple[str, List[str]]:
 
     if not paths:
         _usage_exit()
+
+    if choose_model:
+        requested_model = _choose_model(requested_model)
 
     return requested_model, paths
 
