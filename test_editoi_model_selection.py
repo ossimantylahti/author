@@ -1,6 +1,8 @@
 """Regression tests for the optional Astra model selector."""
+import io
 import os
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 
 # Importing editoi initialises an SDK client but does not make API requests.
@@ -53,6 +55,40 @@ class AstraModelSelectionTests(unittest.TestCase):
                 editoi._parse_cli_args(["book.txt"]),
                 ("gpt-5.6-sol", ["book.txt"]),
             )
+
+    def test_api_not_found_for_preview_model_is_explained_before_fallback(self):
+        class ModelNotFound(Exception):
+            pass
+
+        fake_client = mock.Mock()
+
+        def retrieve(model_name):
+            if model_name == "gpt-6.1-astra":
+                raise ModelNotFound("No such model")
+            return object()
+
+        fake_client.models.retrieve.side_effect = retrieve
+        output = io.StringIO()
+        with (
+            mock.patch.object(editoi, "MODEL", "gpt-6.1-astra"),
+            mock.patch.object(editoi, "ACTIVE_MODEL", None),
+            mock.patch.object(editoi, "NotFoundError", ModelNotFound),
+            mock.patch.object(editoi, "client", fake_client),
+            redirect_stdout(output),
+        ):
+            editoi._select_startup_model()
+            self.assertEqual(editoi.ACTIVE_MODEL, editoi.DEFAULT_MODEL)
+
+        self.assertIn("OpenAI API returned NotFound", output.getvalue())
+        self.assertIn("not a documented API model ID", output.getvalue())
+        self.assertIn("gpt-6-astra", output.getvalue())
+
+    def test_picker_marks_unpublished_models(self):
+        output = io.StringIO()
+        with mock.patch("builtins.input", return_value=""), redirect_stdout(output):
+            selected = editoi._choose_model("gpt-5.6-sol")
+        self.assertEqual(selected, "gpt-5.6-sol")
+        self.assertIn("ei julkaistu API:ssa", output.getvalue())
 
     def test_selected_model_is_first_and_fallbacks_are_unchanged(self):
         with mock.patch.object(editoi, "MODEL", "gpt-6.2-astra"):
